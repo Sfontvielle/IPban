@@ -241,19 +241,26 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 </header>
 
 <div class="info-banner" id="infoBanner">
-  Автоматическая загрузка не сработала. Дашборд пытается получить файлы по указанным выше путям через
-  <code>fetch()</code> — это работает, только если страница открыта через веб-сервер (например,
-  <code>python3 -m http.server</code> в папке с <code>ipbanlog.txt</code> и <code>ipban.sqlite</code>, либо через
-  ваш существующий веб-сервер/nginx), а не как локальный файл (<code>file://</code>). Проверьте пути к файлам выше и
-  нажмите «Обновить сейчас», либо загрузите файлы вручную:
-  <label class="file-btn" style="margin-left:6px;">
-    📄 Лог вручную
-    <input type="file" id="logFileInput" accept=".txt,.log">
-  </label>
-  <label class="file-btn" style="margin-left:6px;">
-    🗄 БД вручную
-    <input type="file" id="dbFileInput" accept=".sqlite,.db,.sqlite3">
-  </label>
+  Автоматическая загрузка через <code>fetch()</code> не сработала (это нормально, если страница открыта как
+  локальный файл — <code>file://</code> — как на скриншотах IPBan под Windows: браузер такие запросы блокирует).
+  Лучший вариант в этом случае — выбрать папку с IPBan целиком: дашборд сам найдёт в ней все файлы логов
+  (например <code>logfile_900</code>, <code>logfile_899</code>, ... — по имени и по дате изменения, а не только
+  по одному фиксированному имени) и файл <code>.sqlite</code>, и объединит логи по их реальным меткам времени.
+  Ничего никуда не загружается — всё остаётся в браузере.
+  <div style="margin-top:6px;">
+    <label class="file-btn">
+      📁 Выбрать папку IPBan целиком (рекомендуется)
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+    </label>
+    <label class="file-btn" style="margin-left:6px;">
+      📄 Лог вручную (можно выбрать сразу все logfile_*)
+      <input type="file" id="logFileInput" accept=".txt,.log" multiple>
+    </label>
+    <label class="file-btn" style="margin-left:6px;">
+      🗄 БД вручную
+      <input type="file" id="dbFileInput" accept=".sqlite,.db,.sqlite3">
+    </label>
+  </div>
 </div>
 
 <nav>
@@ -368,12 +375,23 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     ipSort: { key: "failedCount", dir: -1 },
   };
 
+  function withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
   let SQL = null;
-  const sqlReady = window.initSqlJs
+  // sql.js loads its WASM engine via fetch() the first time it's needed; if
+  // that fetch fails in a way sql.js doesn't handle cleanly (e.g. blocked by
+  // file:// CORS), its promise can hang forever instead of rejecting — wrap
+  // it in a timeout so a stuck sql.js can't freeze the rest of the dashboard.
+  const sqlReadyRaw = window.initSqlJs
     ? window.initSqlJs({ locateFile: f => "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/" + f })
         .then(sql => { SQL = sql; })
-        .catch(err => console.error("sql.js init failed", err))
     : Promise.resolve();
+  const sqlReady = withTimeout(sqlReadyRaw, 20000, "не удалось загрузить движок sql.js за 20с (нет интернета или CDN недоступен)")
+    .catch(err => console.error("sql.js init failed", err));
 
   // ---------------------------------------------------------------------
   // Helpers
@@ -513,6 +531,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // ---------------------------------------------------------------------
   // Log parsing
   // ---------------------------------------------------------------------
+  // Pure: text -> entries. Does not touch state, so it's safe to call once
+  // per rotated log file and concatenate the results.
   function parseLogText(text) {
     const lines = text.split(/\r?\n/);
     const entries = [];
@@ -540,6 +560,42 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     entries.forEach(e => {
       e.type = classifyType(e.message);
       e.ips = extractIps(e.raw);
+    });
+
+    return entries;
+  }
+
+  // Log files are rotated (logfile_900, logfile_899, ...) rather than one
+  // fixed name, so files are matched by content/pattern, not an exact name,
+  // and merged in chronological order using each entry's own timestamp
+  // (falling back to file mtime for entries without a parseable time).
+  function isLikelyLogFile(filename) {
+    return /^logfile/i.test(filename) || /\.(log|txt)$/i.test(filename);
+  }
+
+  function isLikelyDbFile(filename) {
+    return /\.(sqlite3?|db)$/i.test(filename);
+  }
+
+  async function parseLogFiles(files) {
+    const sorted = files.slice().sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
+    let all = [];
+    for (const file of sorted) {
+      const text = await file.text();
+      const entries = parseLogText(text);
+      entries.forEach(e => { if (e.timeMs == null) e.timeMs = file.lastModified || null; });
+      all = all.concat(entries);
+    }
+    all.sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
+    return all;
+  }
+
+  // Rebuilds the merged IP map from scratch out of the current log entries
+  // and DB rows. Called after every (re)load so repeated fetches/refreshes
+  // and re-selecting files don't keep accumulating stale counts.
+  function rebuildIpMap() {
+    state.ipMap = new Map();
+    state.logEntries.forEach(e => {
       e.ips.forEach(ip => {
         const rec = getIpRec(ip);
         rec.logCount++;
@@ -552,8 +608,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         }
       });
     });
-
-    return entries;
+    applyDbToIpMap();
   }
 
   // ---------------------------------------------------------------------
@@ -603,45 +658,50 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     }
     if (!ipTableName && tableNames.length) ipTableName = tableNames[0];
     state.ipTableName = ipTableName;
+  }
 
-    if (ipTableName) {
-      const table = state.dbTables[ipTableName];
-      const cols = table.columns;
-      // prefer a human-readable text column (e.g. "IPAddressText") over the
-      // raw BLOB "IPAddress" column so it lines up with IPs parsed from the log
-      const ipTextCol = findCol(cols, ["ipaddresstext"]);
-      const ipRawCol = cols.find(c => /ipaddress/i.test(c) && c !== ipTextCol) || findCol(cols, ["ip_address", "ip"]);
-      const ipCol = ipTextCol || ipRawCol;
-      const failedCol = findCol(cols, ["failedlogincount", "failedlogins", "failedcount", "count"]);
-      const lastFailedCol = findCol(cols, ["lastfailedlogin", "lastfailed", "lastlogin"]);
-      const banDateCol = findCol(cols, ["bandate", "banstart", "banned"]);
-      const banEndCol = findCol(cols, ["banenddate", "banexpire", "banexpiration"]);
-      const whitelistCol = findCol(cols, ["iswhitelisted", "whitelist"]);
-      const userCol = findCol(cols, ["username", "user"]);
-      const countryCol = findCol(cols, ["country"]);
+  // Applies the current state.dbTables[state.ipTableName] rows onto
+  // state.ipMap. Kept separate from loadDb so rebuildIpMap() can re-run it
+  // without re-parsing the database, and so it composes cleanly with
+  // whatever the log side has already put in the map.
+  function applyDbToIpMap() {
+    const ipTableName = state.ipTableName;
+    if (!ipTableName || !state.dbTables[ipTableName]) return;
+    const table = state.dbTables[ipTableName];
+    const cols = table.columns;
+    // prefer a human-readable text column (e.g. "IPAddressText") over the
+    // raw BLOB "IPAddress" column so it lines up with IPs parsed from the log
+    const ipTextCol = findCol(cols, ["ipaddresstext"]);
+    const ipRawCol = cols.find(c => /ipaddress/i.test(c) && c !== ipTextCol) || findCol(cols, ["ip_address", "ip"]);
+    const ipCol = ipTextCol || ipRawCol;
+    const failedCol = findCol(cols, ["failedlogincount", "failedlogins", "failedcount", "count"]);
+    const lastFailedCol = findCol(cols, ["lastfailedlogin", "lastfailed", "lastlogin"]);
+    const banDateCol = findCol(cols, ["bandate", "banstart", "banned"]);
+    const banEndCol = findCol(cols, ["banenddate", "banexpire", "banexpiration"]);
+    const whitelistCol = findCol(cols, ["iswhitelisted", "whitelist"]);
+    const userCol = findCol(cols, ["username", "user"]);
+    const countryCol = findCol(cols, ["country"]);
 
-      if (ipCol) {
-        table.rows.forEach(row => {
-          const rawIp = row[ipCol];
-          if (!rawIp) return;
-          const ip = (rawIp instanceof Uint8Array || Array.isArray(rawIp)) ? blobToReadable(rawIp) : String(rawIp);
-          const rec = getIpRec(ip);
-          rec.dbRow = row;
-          rec.dbTable = ipTableName;
-          rec.banned = banDateCol ? !!row[banDateCol] : false;
-          rec.whitelisted = whitelistCol ? !!row[whitelistCol] && row[whitelistCol] !== 0 : false;
-          rec.failedCountDb = failedCol ? row[failedCol] : null;
-          rec.lastFailedDb = lastFailedCol ? row[lastFailedCol] : null;
-          rec.lastFailedDbCol = lastFailedCol;
-          rec.banDate = banDateCol ? row[banDateCol] : null;
-          rec.banDateCol = banDateCol;
-          rec.banEndDate = banEndCol ? row[banEndCol] : null;
-          rec.banEndDateCol = banEndCol;
-          rec.userName = userCol ? row[userCol] : null;
-          rec.country = countryCol ? row[countryCol] : null;
-        });
-      }
-    }
+    if (!ipCol) return;
+    table.rows.forEach(row => {
+      const rawIp = row[ipCol];
+      if (!rawIp) return;
+      const ip = (rawIp instanceof Uint8Array || Array.isArray(rawIp)) ? blobToReadable(rawIp) : String(rawIp);
+      const rec = getIpRec(ip);
+      rec.dbRow = row;
+      rec.dbTable = ipTableName;
+      rec.banned = banDateCol ? !!row[banDateCol] : false;
+      rec.whitelisted = whitelistCol ? !!row[whitelistCol] && row[whitelistCol] !== 0 : false;
+      rec.failedCountDb = failedCol ? row[failedCol] : null;
+      rec.lastFailedDb = lastFailedCol ? row[lastFailedCol] : null;
+      rec.lastFailedDbCol = lastFailedCol;
+      rec.banDate = banDateCol ? row[banDateCol] : null;
+      rec.banDateCol = banDateCol;
+      rec.banEndDate = banEndCol ? row[banEndCol] : null;
+      rec.banEndDateCol = banEndCol;
+      rec.userName = userCol ? row[userCol] : null;
+      rec.country = countryCol ? row[countryCol] : null;
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -1001,12 +1061,12 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("dbTableSelect").addEventListener("change", renderRawDbTable);
 
   document.getElementById("logFileInput").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
     setAutoLoadStatus("загрузка лога из файла...");
-    const text = await file.text();
-    state.logEntries = parseLogText(text);
-    setAutoLoadStatus(`лог: ${file.name} (${state.logEntries.length} строк, загружен вручную)`);
+    state.logEntries = await parseLogFiles(files);
+    rebuildIpMap();
+    setAutoLoadStatus(`лог: ${files.length === 1 ? files[0].name : files.length + " файлов"} (${state.logEntries.length} строк, загружено вручную)`);
     document.getElementById("infoBanner").classList.remove("show");
     renderAll();
   });
@@ -1018,6 +1078,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     try {
       const buf = await file.arrayBuffer();
       await loadDb(buf);
+      rebuildIpMap();
       setAutoLoadStatus(`база: ${file.name} (${Object.keys(state.dbTables).length} табл., загружена вручную)`);
       document.getElementById("infoBanner").classList.remove("show");
     } catch (err) {
@@ -1027,10 +1088,56 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     renderAll();
   });
 
+  // Folder picker: works regardless of file:// vs http:// (unlike fetch()),
+  // and doesn't require knowing exact filenames — it scans the folder for
+  // anything that looks like a rotated log file or a sqlite database and
+  // merges all matching log files by their actual timestamps.
+  document.getElementById("folderInput").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setAutoLoadStatus("сканирование папки...");
+
+    const parts = [];
+    try {
+      const logFiles = files.filter(f => isLikelyLogFile(f.name));
+      const dbFile = files.filter(f => isLikelyDbFile(f.name)).sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))[0];
+
+      if (logFiles.length) {
+        state.logEntries = await parseLogFiles(logFiles);
+        parts.push(`лог: ${logFiles.length} файл(ов), ${state.logEntries.length} строк`);
+      } else {
+        parts.push("лог: файлы не найдены в папке");
+      }
+
+      if (dbFile) {
+        try {
+          const buf = await dbFile.arrayBuffer();
+          await loadDb(buf);
+          parts.push(`база: ${dbFile.name} (${Object.keys(state.dbTables).length} табл.)`);
+        } catch (err) {
+          console.error(err);
+          parts.push(`база: ошибка (${err.message})`);
+        }
+      } else {
+        parts.push("база: файл .sqlite не найден в папке");
+      }
+
+      rebuildIpMap();
+      document.getElementById("infoBanner").classList.remove("show");
+    } catch (err) {
+      console.error(err);
+      parts.push(`ошибка: ${err.message}`);
+    }
+    setAutoLoadStatus(`${parts.join(" · ")} · из папки, загружено вручную`);
+    renderAll();
+  });
+
   // -----------------------------------------------------------------------
-  // Automatic loading: the dashboard is meant to sit next to ipbanlog.txt /
-  // ipban.sqlite (or be pointed at URLs serving them) and pull them itself,
-  // instead of requiring the user to pick files by hand every time.
+  // Automatic loading: the dashboard tries to sit next to ipbanlog.txt /
+  // ipban.sqlite (or be pointed at URLs serving them) and pull them itself
+  // via fetch(). This only works when the page is served over http(s) — a
+  // page opened as file:// cannot fetch() local files at all, which is what
+  // the folder picker above and the manual pickers in the banner are for.
   // -----------------------------------------------------------------------
   function setAutoLoadStatus(text) {
     document.getElementById("autoLoadStatus").textContent = text;
@@ -1054,7 +1161,13 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return Object.keys(state.dbTables).length;
   }
 
-  async function autoLoadAll(isManualRefresh) {
+  async function autoLoadAll() {
+    if (location.protocol === "file:") {
+      setAutoLoadStatus("страница открыта как файл — автозагрузка недоступна, выберите папку ниже");
+      document.getElementById("infoBanner").classList.add("show");
+      return;
+    }
+
     const logPath = document.getElementById("logPathInput").value.trim();
     const dbPath = document.getElementById("dbPathInput").value.trim();
     setAutoLoadStatus("загрузка...");
@@ -1063,6 +1176,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       logPath ? fetchLog(logPath) : Promise.reject(new Error("путь не указан")),
       dbPath ? fetchDb(dbPath) : Promise.reject(new Error("путь не указан")),
     ]);
+    rebuildIpMap();
 
     const parts = [];
     let anyError = false;
@@ -1079,16 +1193,16 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     renderAll();
   }
 
-  document.getElementById("refreshBtn").addEventListener("click", () => autoLoadAll(true));
+  document.getElementById("refreshBtn").addEventListener("click", () => autoLoadAll());
 
   document.getElementById("autoRefreshSelect").addEventListener("change", (e) => {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
     const seconds = Number(e.target.value);
-    if (seconds > 0) autoRefreshTimer = setInterval(() => autoLoadAll(false), seconds * 1000);
+    if (seconds > 0) autoRefreshTimer = setInterval(() => autoLoadAll(), seconds * 1000);
   });
 
   renderAll();
-  autoLoadAll(false);
+  autoLoadAll();
 })();
 </script>
 </body>
