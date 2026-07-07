@@ -88,6 +88,9 @@ header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
 .hint { font-size: 12px; color: var(--text-dim); }
 .path-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
 .path-group input[type="text"] { min-width: 150px; font-size: 12px; padding: 5px 8px; }
+.path-group input[type="date"] { font-size: 12px; padding: 5px 8px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text); border-radius: 6px; }
+#logDayGroup { display: none; }
+#logDayGroup.show { display: flex; }
 .small-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .info-banner {
   background: var(--accent-dim);
@@ -221,13 +224,24 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 <header>
   <h1>IPBan Dashboard <span>логи + база в одном месте, загружаются автоматически</span></h1>
   <div class="file-controls">
-    <div class="path-group">
-      <span>Лог:</span>
-      <input type="text" id="logPathInput" value="ipbanlog.txt" title="URL или относительный путь к файлу лога IPBan">
+    <button class="file-btn" id="pickFolderBtn" type="button">📁 Папка IPBan</button>
+    <label class="file-btn" id="folderInputFallbackLabel" style="display:none;">
+      📁 Папка IPBan (резервный способ)
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+    </label>
+    <div class="path-group" id="logDayGroup">
+      <span>Дата лога:</span>
+      <input type="date" id="logDayPicker">
+      <label class="chk"><input type="checkbox" id="logDayAll"> все даты</label>
+      <span class="hint" id="logDayHint"></span>
     </div>
     <div class="path-group">
-      <span>БД:</span>
-      <input type="text" id="dbPathInput" value="ipban.sqlite" title="URL или относительный путь к файлу базы IPBan">
+      <span>Лог (URL):</span>
+      <input type="text" id="logPathInput" value="ipbanlog.txt" title="URL или относительный путь к файлу лога IPBan — используется только если страница открыта через веб-сервер">
+    </div>
+    <div class="path-group">
+      <span>БД (URL):</span>
+      <input type="text" id="dbPathInput" value="ipban.sqlite" title="URL или относительный путь к файлу базы IPBan — используется только если страница открыта через веб-сервер">
     </div>
     <select id="autoRefreshSelect" title="Автоматически перечитывать лог и базу через заданный интервал">
       <option value="0">Автообновление: выкл</option>
@@ -243,17 +257,16 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 <div class="info-banner" id="infoBanner">
   Автоматическая загрузка через <code>fetch()</code> не сработала (это нормально, если страница открыта как
   локальный файл — <code>file://</code> — как на скриншотах IPBan под Windows: браузер такие запросы блокирует).
-  Лучший вариант в этом случае — выбрать папку с IPBan целиком: дашборд сам найдёт в ней все файлы логов
-  (например <code>logfile_900</code>, <code>logfile_899</code>, ... — по имени и по дате изменения, а не только
-  по одному фиксированному имени) и файл <code>.sqlite</code>, и объединит логи по их реальным меткам времени.
-  Ничего никуда не загружается — всё остаётся в браузере.
+  Нажмите <b>«📁 Папка IPBan»</b> вверху страницы и выберите папку с логами и базой целиком — дашборд сам найдёт
+  в ней файлы логов (какое бы имя они ни носили — файлы опознаются по содержимому, по первым строкам с датой,
+  а не по конкретному имени) и файл <code>.sqlite</code>, объединит логи по их реальным меткам времени и покажет
+  свежий день по умолчанию (другой день можно выбрать в поле «Дата лога» вверху). Браузер запомнит доступ к папке,
+  так что «Обновить сейчас» и автообновление продолжат работать без повторного выбора. Ничего никуда не
+  загружается — всё остаётся в браузере. Если браузер не поддерживает выбор папки (например, старый Firefox),
+  используйте резервный способ:
   <div style="margin-top:6px;">
-    <label class="file-btn">
-      📁 Выбрать папку IPBan целиком (рекомендуется)
-      <input type="file" id="folderInput" webkitdirectory directory multiple>
-    </label>
     <label class="file-btn" style="margin-left:6px;">
-      📄 Лог вручную (можно выбрать сразу все logfile_*)
+      📄 Лог вручную (можно выбрать сразу все файлы)
       <input type="file" id="logFileInput" accept=".txt,.log" multiple>
     </label>
     <label class="file-btn" style="margin-left:6px;">
@@ -373,6 +386,9 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     logsPageSize: 50,
     logsSort: { key: "time", dir: 1 },
     ipSort: { key: "failedCount", dir: -1 },
+    dirHandle: null,       // FileSystemDirectoryHandle, kept for silent re-scan on refresh
+    logFileEntries: [],    // [{ name, lastModified, dateStr, getFile() }] — files that look like logs
+    dbEntry: null,         // { name, lastModified, getFile() } — the newest .sqlite found
   };
 
   function withTimeout(promise, ms, message) {
@@ -565,16 +581,33 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return entries;
   }
 
-  // Log files are rotated (logfile_900, logfile_899, ...) rather than one
-  // fixed name, so files are matched by content/pattern, not an exact name,
-  // and merged in chronological order using each entry's own timestamp
-  // (falling back to file mtime for entries without a parseable time).
-  function isLikelyLogFile(filename) {
-    return /^logfile/i.test(filename) || /\.(log|txt)$/i.test(filename);
-  }
+  // Log files are rotated under all sorts of names (logfile_900, ipban.log.3,
+  // a plain date, etc.), so they're identified by content — does the file
+  // start with lines matching IPBan's timestamp format — rather than by
+  // filename, and merged in chronological order using each entry's own
+  // timestamp (falling back to file mtime for entries without a parseable time).
+  const TIMESTAMP_LINE_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/m;
+  const SKIP_EXT_RE = /\.(sqlite3?|db|wal|shm|wasm|js|css|html?|png|jpe?g|gif|bmp|ico|zip|gz|7z|rar|exe|dll|pdf)$/i;
 
   function isLikelyDbFile(filename) {
     return /\.(sqlite3?|db)$/i.test(filename);
+  }
+
+  async function looksLikeLogFile(file) {
+    if (SKIP_EXT_RE.test(file.name)) return false;
+    if (!file.size || file.size > 200 * 1024 * 1024) return false;
+    try {
+      const sample = await file.slice(0, 4096).text();
+      return TIMESTAMP_LINE_RE.test(sample);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function localDateStr(ms) {
+    const d = new Date(ms);
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   async function parseLogFiles(files) {
@@ -588,6 +621,28 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     }
     all.sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
     return all;
+  }
+
+  // Classifies a flat list of { name, lastModified, getFile() } descriptors
+  // (works uniformly for FileSystemFileHandle-backed entries and plain File
+  // objects from an <input>) into the one newest .sqlite file and every file
+  // that looks like a log by content, tagged with its local calendar date.
+  async function classifyEntries(entries) {
+    const dbCandidates = entries.filter(e => isLikelyDbFile(e.name));
+    dbCandidates.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+    const dbEntry = dbCandidates[0] || null;
+
+    const others = entries.filter(e => e !== dbEntry && !/\.(sqlite3?|db)(-wal|-shm)?$/i.test(e.name));
+    const checked = await Promise.all(others.map(async e => {
+      let isLog = false;
+      try { isLog = await looksLikeLogFile(await e.getFile()); } catch (err) { isLog = false; }
+      return { e, isLog };
+    }));
+    const logEntries = checked.filter(c => c.isLog).map(c => c.e);
+    logEntries.forEach(e => { e.dateStr = localDateStr(e.lastModified); });
+    logEntries.sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
+
+    return { dbEntry, logEntries };
   }
 
   // Rebuilds the merged IP map from scratch out of the current log entries
@@ -1092,45 +1147,141 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // and doesn't require knowing exact filenames — it scans the folder for
   // anything that looks like a rotated log file or a sqlite database and
   // merges all matching log files by their actual timestamps.
+  // -----------------------------------------------------------------------
+  // Folder scanning: files are identified by content (see looksLikeLogFile),
+  // not by a specific filename, and grouped by the calendar day they were
+  // last modified so the UI can default to "just the freshest day" instead
+  // of always re-parsing every rotated log file in the folder.
+  // -----------------------------------------------------------------------
+  function populateLogDayPicker() {
+    const group = document.getElementById("logDayGroup");
+    if (!state.logFileEntries.length) { group.classList.remove("show"); return; }
+    group.classList.add("show");
+    const dates = Array.from(new Set(state.logFileEntries.map(e => e.dateStr))).sort();
+    const picker = document.getElementById("logDayPicker");
+    picker.min = dates[0];
+    picker.max = dates[dates.length - 1];
+    if (!picker.value || picker.value < dates[0] || picker.value > dates[dates.length - 1]) {
+      picker.value = dates[dates.length - 1]; // default to the freshest day
+    }
+    document.getElementById("logDayHint").textContent =
+      `доступно ${dates.length === 1 ? "1 дата" : dates.length + " дат"} (${dates[0]} — ${dates[dates.length - 1]}), файлов: ${state.logFileEntries.length}`;
+  }
+
+  async function reloadSelectedDay() {
+    const showAll = document.getElementById("logDayAll").checked;
+    const day = document.getElementById("logDayPicker").value;
+    const chosen = (showAll || !day) ? state.logFileEntries : state.logFileEntries.filter(e => e.dateStr === day);
+
+    const parts = [];
+    if (state.logFileEntries.length) {
+      if (chosen.length) {
+        const files = await Promise.all(chosen.map(e => e.getFile()));
+        state.logEntries = await parseLogFiles(files);
+        parts.push(`лог: ${chosen.length} файл(ов)${(!showAll && day) ? " за " + day : ""}, ${state.logEntries.length} строк`);
+      } else {
+        state.logEntries = [];
+        parts.push(`лог: нет файлов за ${day}`);
+      }
+    } else {
+      parts.push("лог: в папке не найдено файлов, похожих на лог по содержимому");
+    }
+
+    if (state.dbEntry) {
+      try {
+        const file = await state.dbEntry.getFile();
+        const buf = await file.arrayBuffer();
+        await loadDb(buf);
+        parts.push(`база: ${file.name} (${Object.keys(state.dbTables).length} табл.)`);
+      } catch (err) {
+        console.error(err);
+        parts.push(`база: ошибка (${err.message})`);
+      }
+    } else {
+      parts.push("база: файл .sqlite не найден в папке");
+    }
+
+    rebuildIpMap();
+    document.getElementById("infoBanner").classList.remove("show");
+    setAutoLoadStatus(`${parts.join(" · ")} · из папки, обновлено в ${new Date().toLocaleTimeString("ru-RU")}`);
+    renderAll();
+  }
+
+  // Re-lists the live directory handle (picks up files added/changed since
+  // the last scan) without re-prompting the user for folder access.
+  async function listDirEntries(dirHandle) {
+    const handles = [];
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (handle.kind !== "file") continue;
+      handles.push({ name, handle });
+    }
+    return Promise.all(handles.map(async ({ name, handle }) => {
+      const file = await handle.getFile();
+      return { name, lastModified: file.lastModified, getFile: () => handle.getFile() };
+    }));
+  }
+
+  async function rescanAndReload() {
+    setAutoLoadStatus("сканирование папки...");
+    try {
+      if (state.dirHandle) {
+        const entries = await listDirEntries(state.dirHandle);
+        const { dbEntry, logEntries } = await classifyEntries(entries);
+        state.dbEntry = dbEntry;
+        state.logFileEntries = logEntries;
+        populateLogDayPicker();
+      }
+      await reloadSelectedDay();
+    } catch (err) {
+      console.error(err);
+      setAutoLoadStatus("ошибка сканирования папки: " + err.message);
+    }
+  }
+
+  document.getElementById("pickFolderBtn").addEventListener("click", async () => {
+    try {
+      const handle = await window.showDirectoryPicker();
+      state.dirHandle = handle;
+      await rescanAndReload();
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error(err);
+        setAutoLoadStatus("ошибка выбора папки: " + err.message);
+      }
+    }
+  });
+
+  // Fallback for browsers without the File System Access API (e.g. older
+  // Firefox): a one-shot folder snapshot with no persistent handle, so
+  // "Обновить сейчас" re-reads the same in-memory files rather than the disk.
   document.getElementById("folderInput").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+    state.dirHandle = null;
+    const entries = files.map(f => ({ name: f.name, lastModified: f.lastModified, getFile: async () => f }));
     setAutoLoadStatus("сканирование папки...");
-
-    const parts = [];
     try {
-      const logFiles = files.filter(f => isLikelyLogFile(f.name));
-      const dbFile = files.filter(f => isLikelyDbFile(f.name)).sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))[0];
-
-      if (logFiles.length) {
-        state.logEntries = await parseLogFiles(logFiles);
-        parts.push(`лог: ${logFiles.length} файл(ов), ${state.logEntries.length} строк`);
-      } else {
-        parts.push("лог: файлы не найдены в папке");
-      }
-
-      if (dbFile) {
-        try {
-          const buf = await dbFile.arrayBuffer();
-          await loadDb(buf);
-          parts.push(`база: ${dbFile.name} (${Object.keys(state.dbTables).length} табл.)`);
-        } catch (err) {
-          console.error(err);
-          parts.push(`база: ошибка (${err.message})`);
-        }
-      } else {
-        parts.push("база: файл .sqlite не найден в папке");
-      }
-
-      rebuildIpMap();
-      document.getElementById("infoBanner").classList.remove("show");
+      const { dbEntry, logEntries } = await classifyEntries(entries);
+      state.dbEntry = dbEntry;
+      state.logFileEntries = logEntries;
+      populateLogDayPicker();
+      await reloadSelectedDay();
     } catch (err) {
       console.error(err);
-      parts.push(`ошибка: ${err.message}`);
+      setAutoLoadStatus("ошибка: " + err.message);
     }
-    setAutoLoadStatus(`${parts.join(" · ")} · из папки, загружено вручную`);
-    renderAll();
   });
+
+  document.getElementById("logDayPicker").addEventListener("change", () => {
+    document.getElementById("logDayAll").checked = false;
+    reloadSelectedDay();
+  });
+  document.getElementById("logDayAll").addEventListener("change", reloadSelectedDay);
+
+  if (!("showDirectoryPicker" in window)) {
+    document.getElementById("pickFolderBtn").style.display = "none";
+    document.getElementById("folderInputFallbackLabel").style.display = "inline-flex";
+  }
 
   // -----------------------------------------------------------------------
   // Automatic loading: the dashboard tries to sit next to ipbanlog.txt /
@@ -1193,12 +1344,23 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     renderAll();
   }
 
-  document.getElementById("refreshBtn").addEventListener("click", () => autoLoadAll());
+  // Once a folder has been picked (or a one-shot folder snapshot exists),
+  // refresh/auto-refresh should keep using it instead of falling back to the
+  // fetch()-by-fixed-name path.
+  function isFolderModeActive() {
+    return !!(state.dirHandle || state.logFileEntries.length || state.dbEntry);
+  }
+
+  function doRefresh() {
+    return isFolderModeActive() ? rescanAndReload() : autoLoadAll();
+  }
+
+  document.getElementById("refreshBtn").addEventListener("click", () => doRefresh());
 
   document.getElementById("autoRefreshSelect").addEventListener("change", (e) => {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
     const seconds = Number(e.target.value);
-    if (seconds > 0) autoRefreshTimer = setInterval(() => autoLoadAll(), seconds * 1000);
+    if (seconds > 0) autoRefreshTimer = setInterval(() => doRefresh(), seconds * 1000);
   });
 
   renderAll();
