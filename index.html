@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPBan Dashboard</title>
+<style>
+:root {
+  --bg: #f4f6f8;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --border: #e1e5ea;
+  --text: #1b2330;
+  --text-dim: #6b7684;
+  --accent: #2f6feb;
+  --accent-dim: #dbe8ff;
+  --danger: #d1373f;
+  --danger-dim: #fbe4e5;
+  --warn: #b7791f;
+  --warn-dim: #fdf3d9;
+  --ok: #1a7f4e;
+  --ok-dim: #dcf3e6;
+  --row-hover: #f0f4f9;
+  --shadow: 0 1px 3px rgba(20,30,50,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --bg-panel: #1b1f27;
+    --bg-elevated: #232833;
+    --border: #2c3240;
+    --text: #e7ebf1;
+    --text-dim: #93a0b3;
+    --accent: #5b8def;
+    --accent-dim: #1f2c47;
+    --danger: #f0575f;
+    --danger-dim: #3a1c1e;
+    --warn: #e0b64c;
+    --warn-dim: #3a3016;
+    --ok: #3fcc86;
+    --ok-dim: #163a29;
+    --row-hover: #242a35;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+header h1 {
+  font-size: 17px;
+  margin: 0;
+  white-space: nowrap;
+}
+header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
+.file-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-left: auto; }
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.file-btn:hover { border-color: var(--accent); }
+.file-btn input { display: none; }
+.file-status { font-size: 12px; color: var(--text-dim); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hint { font-size: 12px; color: var(--text-dim); }
+nav {
+  display: flex;
+  gap: 4px;
+  padding: 8px 20px 0 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+nav button {
+  background: none;
+  border: none;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+nav button:hover:not(.active) { color: var(--text); }
+main { padding: 18px 20px 40px 20px; max-width: 1400px; margin: 0 auto; }
+.tab { display: none; }
+.tab.active { display: block; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.card .num { font-size: 24px; font-weight: 700; line-height: 1.2; }
+.card .lbl { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.card.accent .num { color: var(--accent); }
+.card.danger .num { color: var(--danger); }
+.card.ok .num { color: var(--ok); }
+.card.warn .num { color: var(--warn); }
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.panel-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.panel-body { padding: 14px 16px; }
+
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12.5px; }
+.bar-row .ip { width: 130px; flex-shrink: 0; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.bar-track { flex: 1; background: var(--bg); border-radius: 4px; overflow: hidden; height: 16px; border: 1px solid var(--border); }
+.bar-fill { height: 100%; background: var(--accent); }
+.bar-val { width: 40px; text-align: right; color: var(--text-dim); flex-shrink: 0; }
+
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+input[type="text"], select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+input[type="text"] { min-width: 220px; }
+label.chk { font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; color: var(--text-dim); }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { cursor: pointer; user-select: none; color: var(--text-dim); font-weight: 600; white-space: nowrap; position: sticky; top: 0; background: var(--bg-panel); }
+th:hover { color: var(--accent); }
+tr:hover td { background: var(--row-hover); }
+td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.table-wrap { overflow: auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 8px; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge.banned { background: var(--danger-dim); color: var(--danger); }
+.badge.whitelisted { background: var(--ok-dim); color: var(--ok); }
+.badge.seen { background: var(--accent-dim); color: var(--accent); }
+.badge.warn { background: var(--warn-dim); color: var(--warn); }
+.badge.info { background: var(--accent-dim); color: var(--accent); }
+.badge.err { background: var(--danger-dim); color: var(--danger); }
+
+.pager { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-dim); }
+.pager button {
+  background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 12.5px;
+}
+.pager button:disabled { opacity: .4; cursor: default; }
+
+.empty { padding: 40px 20px; text-align: center; color: var(--text-dim); }
+.empty b { color: var(--text); }
+
+.detail-row td { background: var(--bg); }
+.detail-box { padding: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; background: var(--bg-elevated); border-radius: 6px; }
+
+.ip-link { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
+.small-btn {
+  background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+}
+.small-btn:hover { border-color: var(--accent); }
+.footer-note { color: var(--text-dim); font-size: 11.5px; margin-top: 30px; text-align: center; }
+code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>IPBan Dashboard <span>логи + база в одном месте</span></h1>
+  <div class="file-controls">
+    <label class="file-btn">
+      📄 Загрузить лог (ipbanlog.txt)
+      <input type="file" id="logFileInput" accept=".txt,.log">
+    </label>
+    <span class="file-status" id="logFileStatus">файл не выбран</span>
+    <label class="file-btn">
+      🗄 Загрузить базу (ipban.sqlite)
+      <input type="file" id="dbFileInput" accept=".sqlite,.db,.sqlite3">
+    </label>
+    <span class="file-status" id="dbFileStatus">файл не выбран</span>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="overview">Обзор</button>
+  <button class="tab-btn" data-tab="logs">Логи</button>
+  <button class="tab-btn" data-tab="explorer">IP Explorer</button>
+  <button class="tab-btn" data-tab="dbtables">Таблицы БД</button>
+</nav>
+
+<main>
+
+<div class="tab active" id="tab-overview">
+  <div class="cards" id="overviewCards"></div>
+  <div class="panel">
+    <div class="panel-head">Топ IP по активности (провалы входа / упоминания в логе)</div>
+    <div class="panel-body" id="topIpsBox">
+      <div class="empty">Загрузите лог и/или базу данных, чтобы увидеть статистику.</div>
+    </div>
+  </div>
+</div>
+
+<div class="tab" id="tab-logs">
+  <div class="toolbar">
+    <input type="text" id="logSearch" placeholder="Поиск по тексту / IP...">
+    <select id="logLevelFilter"><option value="">Все уровни</option></select>
+    <select id="logTypeFilter">
+      <option value="">Все типы</option>
+      <option value="ban">Бан</option>
+      <option value="unban">Разбан</option>
+      <option value="whitelist">Whitelist</option>
+      <option value="failed-login">Неудачный вход</option>
+      <option value="login-attempt">Попытка входа</option>
+      <option value="info">Прочее</option>
+    </select>
+    <span class="hint" id="logCountHint"></span>
+  </div>
+  <div class="table-wrap">
+    <table id="logsTable">
+      <thead><tr><th data-k="time">Время</th><th data-k="level">Уровень</th><th data-k="type">Тип</th><th data-k="ips">IP</th><th data-k="message">Сообщение</th></tr></thead>
+      <tbody id="logsTbody"><tr><td colspan="5" class="empty">Лог не загружен. Нажмите «Загрузить лог» вверху страницы.</td></tr></tbody>
+    </table>
+  </div>
+  <div class="pager" id="logsPager" style="margin-top:10px;"></div>
+</div>
+
+<div class="tab" id="tab-explorer">
+  <div class="toolbar">
+    <input type="text" id="ipSearch" placeholder="Поиск по IP...">
+    <label class="chk"><input type="checkbox" id="ipOnlyBanned"> только забаненные</label>
+    <label class="chk"><input type="checkbox" id="ipOnlyWhitelisted"> только whitelist</label>
+    <span class="hint" id="ipCountHint"></span>
+    <button class="small-btn" id="exportCsvBtn" style="margin-left:auto;">Экспорт CSV</button>
+  </div>
+  <div class="table-wrap">
+    <table id="ipTable">
+      <thead><tr>
+        <th data-k="ip">IP адрес</th>
+        <th data-k="status">Статус</th>
+        <th data-k="failedCount">Failed logins</th>
+        <th data-k="logCount">Записей в логе</th>
+        <th data-k="firstSeen">Первое появление</th>
+        <th data-k="lastSeen">Последнее появление</th>
+        <th data-k="extra">Доп. инфо (из БД)</th>
+      </tr></thead>
+      <tbody id="ipTbody"><tr><td colspan="7" class="empty">Загрузите лог и/или базу данных, чтобы увидеть список IP.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tab" id="tab-dbtables">
+  <div class="toolbar">
+    <select id="dbTableSelect"><option value="">— выберите таблицу —</option></select>
+    <span class="hint" id="dbTableHint"></span>
+  </div>
+  <div class="table-wrap">
+    <table id="rawDbTable"><thead></thead><tbody><tr><td class="empty">База данных не загружена. Нажмите «Загрузить базу» вверху страницы.</td></tr></tbody></table>
+  </div>
+</div>
+
+</main>
+
+<div class="footer-note">Всё обрабатывается локально в браузере — файлы никуда не отправляются. Форматы логов IPBan могут отличаться в зависимости от версии, разбор эвристический.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
+  const state = {
+    logEntries: [],       // {time, timeMs, level, type, ips:[...], message, raw}
+    ipMap: new Map(),      // ip -> {ip, logCount, firstSeenMs, lastSeenMs, levels:{}, types:{}, failedCountLog, dbRow, dbTable, banned, whitelisted}
+    dbTables: {},          // name -> {columns:[...], rows:[...] , totalRows}
+    ipTableName: null,
+    logsPage: 0,
+    logsPageSize: 50,
+    logsSort: { key: "time", dir: 1 },
+    ipSort: { key: "failedCount", dir: -1 },
+  };
+
+  let SQL = null;
+  const sqlReady = window.initSqlJs
+    ? window.initSqlJs({ locateFile: f => "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/" + f })
+        .then(sql => { SQL = sql; })
+        .catch(err => console.error("sql.js init failed", err))
+    : Promise.resolve();
+
+  // ---------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------
+  const IPV4_RE = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d{1,2})\.){3}(?:25[0-5]|2[0-4]\d|1?\d{1,2})\b/g;
+  const IPV6_RE = /\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}\b/g;
+  const TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)(?:\s*[+-]\d{2}:?\d{2})?/;
+  const LEVEL_RE = /\b(TRACE|DEBUG|INFO|INFORMATION|WARN|WARNING|ERROR|ERR|FATAL|CRITICAL)\b/i;
+
+  function normalizeLevel(raw) {
+    if (!raw) return "Info";
+    const u = raw.toUpperCase();
+    if (u.startsWith("TRACE")) return "Trace";
+    if (u.startsWith("DEBUG")) return "Debug";
+    if (u.startsWith("INFO")) return "Info";
+    if (u.startsWith("WARN")) return "Warning";
+    if (u.startsWith("ERR")) return "Error";
+    if (u.startsWith("FATAL") || u.startsWith("CRIT")) return "Critical";
+    return raw;
+  }
+
+  function extractIps(text) {
+    const found = new Set();
+    let m;
+    IPV4_RE.lastIndex = 0;
+    while ((m = IPV4_RE.exec(text))) found.add(m[0]);
+    IPV6_RE.lastIndex = 0;
+    while ((m = IPV6_RE.exec(text))) {
+      const candidate = m[0];
+      const colonCount = (candidate.match(/:/g) || []).length;
+      const hasHexLetter = /[a-fA-F]/.test(candidate);
+      // filter out things like "12:00:00" (a timestamp fragment) which is
+      // technically a valid (but nonsensical) match for the loose ipv6 regex
+      if (!hasHexLetter && colonCount <= 2) continue;
+      found.add(candidate);
+    }
+    return Array.from(found);
+  }
+
+  function classifyType(message) {
+    const m = message.toLowerCase();
+    if (/\bunban/.test(m)) return "unban";
+    if (/whitelist/.test(m)) return "whitelist";
+    if (/\bban(ned|ning)?\b/.test(m)) return "ban";
+    if (/failed (to )?login|login failed|invalid login|failed login/.test(m)) return "failed-login";
+    if (/login attempt/.test(m)) return "login-attempt";
+    return "info";
+  }
+
+  function parseTimeToMs(str) {
+    if (!str) return null;
+    const norm = str.replace(",", ".").replace(" ", "T");
+    const d = new Date(norm);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function fmtTime(ms) {
+    if (ms == null) return "—";
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return "—";
+    return d.toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+  }
+
+  function getIpRec(ip) {
+    let rec = state.ipMap.get(ip);
+    if (!rec) {
+      rec = { ip, logCount: 0, firstSeenMs: null, lastSeenMs: null, levels: {}, types: {}, failedCountLog: 0, dbRow: null, banned: false, whitelisted: false };
+      state.ipMap.set(ip, rec);
+    }
+    return rec;
+  }
+
+  // ---------------------------------------------------------------------
+  // Log parsing
+  // ---------------------------------------------------------------------
+  function parseLogText(text) {
+    const lines = text.split(/\r?\n/);
+    const entries = [];
+    let current = null;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const tsMatch = line.match(TIMESTAMP_RE);
+      if (tsMatch) {
+        if (current) entries.push(current);
+        const timeStr = tsMatch[1];
+        const rest = line.slice(tsMatch[0].length).trim().replace(/^[,\-\s]+/, "");
+        const levelMatch = rest.match(LEVEL_RE);
+        const level = normalizeLevel(levelMatch ? levelMatch[1] : null);
+        current = { time: timeStr, timeMs: parseTimeToMs(timeStr), level, message: rest, raw: line };
+      } else if (current) {
+        current.message += "\n" + line;
+        current.raw += "\n" + line;
+      } else {
+        current = { time: null, timeMs: null, level: "Info", message: line, raw: line };
+      }
+    }
+    if (current) entries.push(current);
+
+    entries.forEach(e => {
+      e.type = classifyType(e.message);
+      e.ips = extractIps(e.raw);
+      e.ips.forEach(ip => {
+        const rec = getIpRec(ip);
+        rec.logCount++;
+        rec.levels[e.level] = (rec.levels[e.level] || 0) + 1;
+        rec.types[e.type] = (rec.types[e.type] || 0) + 1;
+        if (e.type === "failed-login" || e.type === "login-attempt") rec.failedCountLog++;
+        if (e.timeMs != null) {
+          if (rec.firstSeenMs == null || e.timeMs < rec.firstSeenMs) rec.firstSeenMs = e.timeMs;
+          if (rec.lastSeenMs == null || e.timeMs > rec.lastSeenMs) rec.lastSeenMs = e.timeMs;
+        }
+      });
+    });
+
+    return entries;
+  }
+
+  // ---------------------------------------------------------------------
+  // DB loading (sql.js)
+  // ---------------------------------------------------------------------
+  function findCol(columns, patterns) {
+    const lower = columns.map(c => c.toLowerCase());
+    for (const p of patterns) {
+      const idx = lower.findIndex(c => c.includes(p));
+      if (idx !== -1) return columns[idx];
+    }
+    return null;
+  }
+
+  async function loadDb(arrayBuffer) {
+    await sqlReady;
+    if (!SQL) throw new Error("sql.js не инициализировался");
+    const db = new SQL.Database(new Uint8Array(arrayBuffer));
+
+    const tableNames = [];
+    const tRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+    if (tRes.length) tRes[0].values.forEach(v => tableNames.push(v[0]));
+
+    state.dbTables = {};
+    let ipTableName = null;
+
+    for (const name of tableNames) {
+      const colsRes = db.exec(`PRAGMA table_info("${name}")`);
+      const columns = colsRes.length ? colsRes[0].values.map(v => v[1]) : [];
+      let totalRows = 0;
+      try {
+        const cnt = db.exec(`SELECT COUNT(*) FROM "${name}"`);
+        totalRows = cnt.length ? cnt[0].values[0][0] : 0;
+      } catch (e) { /* ignore */ }
+
+      let rows = [];
+      try {
+        const res = db.exec(`SELECT * FROM "${name}" LIMIT 5000`);
+        if (res.length) rows = res[0].values.map(v => Object.fromEntries(columns.map((c, i) => [c, v[i]])));
+      } catch (e) { /* ignore */ }
+
+      state.dbTables[name] = { columns, rows, totalRows };
+
+      if (!ipTableName && (/ipaddress/i.test(name) || columns.some(c => /^ipaddress$/i.test(c)))) {
+        ipTableName = name;
+      }
+    }
+    if (!ipTableName && tableNames.length) ipTableName = tableNames[0];
+    state.ipTableName = ipTableName;
+
+    if (ipTableName) {
+      const table = state.dbTables[ipTableName];
+      const cols = table.columns;
+      const ipCol = findCol(cols, ["ipaddress", "ip_address", "ip"]);
+      const failedCol = findCol(cols, ["failedlogincount", "failedlogins", "failedcount", "count"]);
+      const lastFailedCol = findCol(cols, ["lastfailedlogin", "lastfailed", "lastlogin"]);
+      const banDateCol = findCol(cols, ["bandate", "banstart", "banned"]);
+      const banEndCol = findCol(cols, ["banenddate", "banexpire", "banexpiration"]);
+      const whitelistCol = findCol(cols, ["iswhitelisted", "whitelist"]);
+      const userCol = findCol(cols, ["username", "user"]);
+      const countryCol = findCol(cols, ["country"]);
+
+      if (ipCol) {
+        table.rows.forEach(row => {
+          const ip = row[ipCol];
+          if (!ip) return;
+          const rec = getIpRec(String(ip));
+          rec.dbRow = row;
+          rec.dbTable = ipTableName;
+          rec.banned = banDateCol ? !!row[banDateCol] : false;
+          rec.whitelisted = whitelistCol ? !!row[whitelistCol] && row[whitelistCol] !== 0 : false;
+          rec.failedCountDb = failedCol ? row[failedCol] : null;
+          rec.lastFailedDb = lastFailedCol ? row[lastFailedCol] : null;
+          rec.banDate = banDateCol ? row[banDateCol] : null;
+          rec.banEndDate = banEndCol ? row[banEndCol] : null;
+          rec.userName = userCol ? row[userCol] : null;
+          rec.country = countryCol ? row[countryCol] : null;
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering: Overview
+  // ---------------------------------------------------------------------
+  function renderOverview() {
+    const entries = state.logEntries;
+    const ips = Array.from(state.ipMap.values());
+    const bannedCount = ips.filter(r => r.banned).length;
+    const whitelistedCount = ips.filter(r => r.whitelisted).length;
+    const failedEvents = entries.filter(e => e.type === "failed-login" || e.type === "login-attempt").length;
+    const banEvents = entries.filter(e => e.type === "ban").length;
+
+    let dateRange = "—";
+    const times = entries.map(e => e.timeMs).filter(t => t != null);
+    if (times.length) {
+      dateRange = fmtTime(Math.min(...times)) + " → " + fmtTime(Math.max(...times));
+    }
+
+    const cards = [
+      { num: entries.length, lbl: "Строк лога разобрано", cls: "" },
+      { num: ips.length, lbl: "Уникальных IP", cls: "accent" },
+      { num: bannedCount, lbl: "Забанено (БД)", cls: "danger" },
+      { num: whitelistedCount, lbl: "В whitelist (БД)", cls: "ok" },
+      { num: failedEvents, lbl: "Событий неудачного входа", cls: "warn" },
+      { num: banEvents, lbl: "Событий бана (лог)", cls: "danger" },
+    ];
+    document.getElementById("overviewCards").innerHTML = cards.map(c =>
+      `<div class="card ${c.cls}"><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>`
+    ).join("") + `<div class="card"><div class="num" style="font-size:14px;">${dateRange}</div><div class="lbl">Диапазон времени лога</div></div>`;
+
+    const top = ips
+      .map(r => ({ ip: r.ip, val: (r.failedCountDb != null ? Number(r.failedCountDb) : 0) + r.failedCountLog + (r.logCount * 0.01) }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 15);
+
+    const box = document.getElementById("topIpsBox");
+    if (!top.length || top.every(t => t.val === 0)) {
+      box.innerHTML = `<div class="empty">Нет данных. Загрузите лог и/или базу данных.</div>`;
+      return;
+    }
+    const max = Math.max(...top.map(t => t.val), 1);
+    box.innerHTML = top.map(t => `
+      <div class="bar-row">
+        <span class="ip mono ip-link" data-ip="${escapeHtml(t.ip)}">${escapeHtml(t.ip)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, (t.val / max) * 100)}%"></div></div>
+        <span class="bar-val">${Math.round(t.val)}</span>
+      </div>`).join("");
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering: Logs tab
+  // ---------------------------------------------------------------------
+  function populateLogFilters() {
+    const levels = new Set(state.logEntries.map(e => e.level));
+    const sel = document.getElementById("logLevelFilter");
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Все уровни</option>' + Array.from(levels).sort().map(l => `<option value="${l}">${l}</option>`).join("");
+    sel.value = current;
+  }
+
+  function badgeForLevel(level) {
+    const l = level.toLowerCase();
+    let cls = "info";
+    if (l.startsWith("warn")) cls = "warn";
+    else if (l.startsWith("err") || l.startsWith("fatal") || l.startsWith("crit")) cls = "err";
+    return `<span class="badge ${cls}">${escapeHtml(level)}</span>`;
+  }
+
+  function badgeForType(type) {
+    const labels = { ban: "Бан", unban: "Разбан", whitelist: "Whitelist", "failed-login": "Неудачный вход", "login-attempt": "Попытка входа", info: "Инфо" };
+    const cls = type === "ban" ? "banned" : type === "whitelist" ? "whitelisted" : type === "unban" ? "seen" : "info";
+    return `<span class="badge ${cls}">${labels[type] || type}</span>`;
+  }
+
+  function filteredLogs() {
+    const q = document.getElementById("logSearch").value.trim().toLowerCase();
+    const level = document.getElementById("logLevelFilter").value;
+    const type = document.getElementById("logTypeFilter").value;
+    return state.logEntries.filter(e => {
+      if (level && e.level !== level) return false;
+      if (type && e.type !== type) return false;
+      if (q) {
+        const hay = (e.message + " " + e.ips.join(" ")).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderLogs() {
+    populateLogFilters();
+    let rows = filteredLogs();
+
+    const { key, dir } = state.logsSort;
+    rows = rows.slice().sort((a, b) => {
+      let av, bv;
+      if (key === "time") { av = a.timeMs || 0; bv = b.timeMs || 0; }
+      else if (key === "ips") { av = a.ips.join(","); bv = b.ips.join(","); }
+      else { av = a[key] || ""; bv = b[key] || ""; }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / state.logsPageSize));
+    if (state.logsPage >= totalPages) state.logsPage = totalPages - 1;
+    if (state.logsPage < 0) state.logsPage = 0;
+    const start = state.logsPage * state.logsPageSize;
+    const pageRows = rows.slice(start, start + state.logsPageSize);
+
+    const tbody = document.getElementById("logsTbody");
+    if (!state.logEntries.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">Лог не загружен. Нажмите «Загрузить лог» вверху страницы.</td></tr>`;
+    } else if (!pageRows.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+    } else {
+      tbody.innerHTML = pageRows.map(e => `
+        <tr>
+          <td class="mono" style="white-space:nowrap;">${escapeHtml(e.time || "—")}</td>
+          <td>${badgeForLevel(e.level)}</td>
+          <td>${badgeForType(e.type)}</td>
+          <td class="mono">${e.ips.map(ip => `<span class="ip-link" data-ip="${escapeHtml(ip)}">${escapeHtml(ip)}</span>`).join(", ")}</td>
+          <td style="white-space:pre-wrap;">${escapeHtml(e.message)}</td>
+        </tr>`).join("");
+    }
+
+    document.getElementById("logCountHint").textContent = total ? `показано ${Math.min(start + 1, total)}–${Math.min(start + pageRows.length, total)} из ${total}` : "";
+
+    const pager = document.getElementById("logsPager");
+    pager.innerHTML = `
+      <button id="logsPrev" ${state.logsPage === 0 ? "disabled" : ""}>← назад</button>
+      <span>Страница ${state.logsPage + 1} из ${totalPages}</span>
+      <button id="logsNext" ${state.logsPage >= totalPages - 1 ? "disabled" : ""}>вперёд →</button>`;
+    document.getElementById("logsPrev").onclick = () => { state.logsPage--; renderLogs(); };
+    document.getElementById("logsNext").onclick = () => { state.logsPage++; renderLogs(); };
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering: IP Explorer tab
+  // ---------------------------------------------------------------------
+  function ipStatusBadge(rec) {
+    if (rec.banned) return '<span class="badge banned">забанен</span>';
+    if (rec.whitelisted) return '<span class="badge whitelisted">whitelist</span>';
+    return '<span class="badge seen">замечен</span>';
+  }
+
+  function ipExtraInfo(rec) {
+    const parts = [];
+    if (rec.userName) parts.push(`user: ${escapeHtml(String(rec.userName))}`);
+    if (rec.country) parts.push(`country: ${escapeHtml(String(rec.country))}`);
+    if (rec.banEndDate) parts.push(`ban end: ${escapeHtml(String(rec.banEndDate))}`);
+    return parts.join(" · ") || "—";
+  }
+
+  function filteredIps() {
+    const q = document.getElementById("ipSearch").value.trim().toLowerCase();
+    const onlyBanned = document.getElementById("ipOnlyBanned").checked;
+    const onlyWhitelisted = document.getElementById("ipOnlyWhitelisted").checked;
+    return Array.from(state.ipMap.values()).filter(r => {
+      if (q && !r.ip.toLowerCase().includes(q)) return false;
+      if (onlyBanned && !r.banned) return false;
+      if (onlyWhitelisted && !r.whitelisted) return false;
+      return true;
+    });
+  }
+
+  function renderIpExplorer() {
+    let rows = filteredIps();
+    const { key, dir } = state.ipSort;
+    rows = rows.slice().sort((a, b) => {
+      const map = {
+        ip: [a.ip, b.ip],
+        status: [a.banned ? 2 : a.whitelisted ? 1 : 0, b.banned ? 2 : b.whitelisted ? 1 : 0],
+        failedCount: [a.failedCountDb != null ? Number(a.failedCountDb) : a.failedCountLog, b.failedCountDb != null ? Number(b.failedCountDb) : b.failedCountLog],
+        logCount: [a.logCount, b.logCount],
+        firstSeen: [a.firstSeenMs || 0, b.firstSeenMs || 0],
+        lastSeen: [a.lastSeenMs || 0, b.lastSeenMs || 0],
+      };
+      const [av, bv] = map[key] || [0, 0];
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+
+    document.getElementById("ipCountHint").textContent = `${rows.length} IP`;
+
+    const tbody = document.getElementById("ipTbody");
+    if (!state.ipMap.size) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Загрузите лог и/или базу данных, чтобы увидеть список IP.</td></tr>`;
+      return;
+    }
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr class="ip-row" data-ip="${escapeHtml(r.ip)}" style="cursor:pointer;">
+        <td class="mono">${escapeHtml(r.ip)}</td>
+        <td>${ipStatusBadge(r)}</td>
+        <td>${r.failedCountDb != null ? r.failedCountDb : (r.failedCountLog || "—")}</td>
+        <td>${r.logCount || 0}</td>
+        <td class="mono">${fmtTime(r.firstSeenMs)}</td>
+        <td class="mono">${fmtTime(r.lastSeenMs)}</td>
+        <td>${ipExtraInfo(r)}</td>
+      </tr>`).join("");
+
+    Array.from(tbody.querySelectorAll(".ip-row")).forEach(tr => {
+      tr.addEventListener("click", () => toggleIpDetail(tr));
+    });
+  }
+
+  function toggleIpDetail(tr) {
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains("detail-row")) { next.remove(); return; }
+    document.querySelectorAll(".detail-row").forEach(el => el.remove());
+    const ip = tr.getAttribute("data-ip");
+    const matches = state.logEntries.filter(e => e.ips.includes(ip));
+    const detail = document.createElement("tr");
+    detail.className = "detail-row";
+    const body = matches.length
+      ? matches.map(e => `[${e.time || "?"}] (${e.level}) ${e.message}`).join("\n\n")
+      : "Нет связанных строк лога для этого IP.";
+    detail.innerHTML = `<td colspan="7"><div class="detail-box">${escapeHtml(body)}</div></td>`;
+    tr.after(detail);
+  }
+
+  function exportCsv() {
+    const rows = filteredIps();
+    const header = ["ip", "status", "failedCountDb", "failedCountLog", "logCount", "firstSeen", "lastSeen", "userName", "country", "banDate", "banEndDate"];
+    const lines = [header.join(",")];
+    rows.forEach(r => {
+      const status = r.banned ? "banned" : r.whitelisted ? "whitelisted" : "seen";
+      const vals = [r.ip, status, r.failedCountDb ?? "", r.failedCountLog ?? "", r.logCount ?? "", fmtTime(r.firstSeenMs), fmtTime(r.lastSeenMs), r.userName ?? "", r.country ?? "", r.banDate ?? "", r.banEndDate ?? ""];
+      lines.push(vals.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ipban-ips.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering: raw DB tables tab
+  // ---------------------------------------------------------------------
+  function populateDbTableSelect() {
+    const sel = document.getElementById("dbTableSelect");
+    const names = Object.keys(state.dbTables);
+    sel.innerHTML = '<option value="">— выберите таблицу —</option>' + names.map(n => `<option value="${n}">${n} (${state.dbTables[n].totalRows})</option>`).join("");
+    if (state.ipTableName) sel.value = state.ipTableName;
+  }
+
+  function renderRawDbTable() {
+    const name = document.getElementById("dbTableSelect").value;
+    const table = document.getElementById("rawDbTable");
+    const hint = document.getElementById("dbTableHint");
+    if (!name || !state.dbTables[name]) {
+      table.querySelector("thead").innerHTML = "";
+      table.querySelector("tbody").innerHTML = `<tr><td class="empty">${Object.keys(state.dbTables).length ? "Выберите таблицу выше." : "База данных не загружена."}</td></tr>`;
+      hint.textContent = "";
+      return;
+    }
+    const { columns, rows, totalRows } = state.dbTables[name];
+    hint.textContent = rows.length < totalRows ? `показаны первые ${rows.length} из ${totalRows} строк` : `${totalRows} строк`;
+    table.querySelector("thead").innerHTML = `<tr>${columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr>`;
+    table.querySelector("tbody").innerHTML = rows.length
+      ? rows.map(row => `<tr>${columns.map(c => `<td class="mono">${row[c] == null ? "—" : escapeHtml(String(row[c]))}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="${columns.length}" class="empty">Таблица пуста.</td></tr>`;
+  }
+
+  // ---------------------------------------------------------------------
+  // Global render + wiring
+  // ---------------------------------------------------------------------
+  function renderAll() {
+    renderOverview();
+    renderLogs();
+    renderIpExplorer();
+    populateDbTableSelect();
+    renderRawDbTable();
+  }
+
+  document.addEventListener("click", e => {
+    const link = e.target.closest(".ip-link");
+    if (!link) return;
+    const ip = link.getAttribute("data-ip");
+    document.querySelector('.tab-btn[data-tab="explorer"]').click();
+    document.getElementById("ipSearch").value = ip;
+    renderIpExplorer();
+  });
+
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  ["logSearch", "logLevelFilter", "logTypeFilter"].forEach(id => {
+    document.getElementById(id).addEventListener("input", () => { state.logsPage = 0; renderLogs(); });
+  });
+  document.querySelectorAll("#logsTable th").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.k;
+      if (state.logsSort.key === k) state.logsSort.dir *= -1; else { state.logsSort.key = k; state.logsSort.dir = 1; }
+      renderLogs();
+    });
+  });
+
+  ["ipSearch", "ipOnlyBanned", "ipOnlyWhitelisted"].forEach(id => {
+    document.getElementById(id).addEventListener("input", renderIpExplorer);
+  });
+  document.querySelectorAll("#ipTable th").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.k;
+      if (state.ipSort.key === k) state.ipSort.dir *= -1; else { state.ipSort.key = k; state.ipSort.dir = -1; }
+      renderIpExplorer();
+    });
+  });
+  document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+  document.getElementById("dbTableSelect").addEventListener("change", renderRawDbTable);
+
+  document.getElementById("logFileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById("logFileStatus").textContent = "загрузка...";
+    const text = await file.text();
+    state.logEntries = parseLogText(text);
+    document.getElementById("logFileStatus").textContent = `${file.name} (${state.logEntries.length} строк)`;
+    renderAll();
+  });
+
+  document.getElementById("dbFileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById("dbFileStatus").textContent = "загрузка...";
+    try {
+      const buf = await file.arrayBuffer();
+      await loadDb(buf);
+      document.getElementById("dbFileStatus").textContent = `${file.name} (${Object.keys(state.dbTables).length} табл.)`;
+    } catch (err) {
+      console.error(err);
+      document.getElementById("dbFileStatus").textContent = "ошибка загрузки: " + err.message;
+    }
+    renderAll();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
