@@ -224,7 +224,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 <nav>
   <button class="tab-btn active" data-tab="overview">Обзор</button>
   <button class="tab-btn" data-tab="logs">Логи</button>
-  <button class="tab-btn" data-tab="explorer">IP Explorer</button>
+  <button class="tab-btn" data-tab="explorer">IP-адреса</button>
   <button class="tab-btn" data-tab="dbtables">Таблицы БД</button>
 </nav>
 
@@ -248,7 +248,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <option value="">Все типы</option>
       <option value="ban">Бан</option>
       <option value="unban">Разбан</option>
-      <option value="whitelist">Whitelist</option>
+      <option value="whitelist">Белый список</option>
       <option value="failed-login">Неудачный вход</option>
       <option value="login-attempt">Попытка входа</option>
       <option value="info">Прочее</option>
@@ -268,7 +268,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   <div class="toolbar">
     <input type="text" id="ipSearch" placeholder="Поиск по IP...">
     <label class="chk"><input type="checkbox" id="ipOnlyBanned"> только забаненные</label>
-    <label class="chk"><input type="checkbox" id="ipOnlyWhitelisted"> только whitelist</label>
+    <label class="chk"><input type="checkbox" id="ipOnlyWhitelisted"> только из белого списка</label>
     <span class="hint" id="ipCountHint"></span>
     <button class="small-btn" id="exportCsvBtn" style="margin-left:auto;">Экспорт CSV</button>
   </div>
@@ -277,7 +277,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <thead><tr>
         <th data-k="ip">IP адрес</th>
         <th data-k="status">Статус</th>
-        <th data-k="failedCount">Failed logins</th>
+        <th data-k="failedCount">Неудачных входов</th>
         <th data-k="logCount">Записей в логе</th>
         <th data-k="firstSeen">Первое появление</th>
         <th data-k="lastSeen">Последнее появление</th>
@@ -597,7 +597,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   }
 
   function badgeForType(type) {
-    const labels = { ban: "Бан", unban: "Разбан", whitelist: "Whitelist", "failed-login": "Неудачный вход", "login-attempt": "Попытка входа", info: "Инфо" };
+    const labels = { ban: "Бан", unban: "Разбан", whitelist: "Белый список", "failed-login": "Неудачный вход", "login-attempt": "Попытка входа", info: "Инфо" };
     const cls = type === "ban" ? "banned" : type === "whitelist" ? "whitelisted" : type === "unban" ? "seen" : "info";
     return `<span class="badge ${cls}">${labels[type] || type}</span>`;
   }
@@ -671,7 +671,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // ---------------------------------------------------------------------
   function ipStatusBadge(rec) {
     if (rec.banned) return '<span class="badge banned">забанен</span>';
-    if (rec.whitelisted) return '<span class="badge whitelisted">whitelist</span>';
+    if (rec.whitelisted) return '<span class="badge whitelisted">белый список</span>';
     return '<span class="badge seen">замечен</span>';
   }
 
