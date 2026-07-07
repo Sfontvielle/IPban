@@ -91,6 +91,18 @@ header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
 .path-group input[type="date"] { font-size: 12px; padding: 5px 8px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text); border-radius: 6px; }
 #logDayGroup { display: none; }
 #logDayGroup.show { display: flex; }
+.sources-list { display: flex; gap: 6px; flex-wrap: wrap; width: 100%; padding: 0 20px 8px 20px; }
+.sources-list:empty { padding: 0; }
+.source-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent-dim); color: var(--text); border-radius: 999px;
+  padding: 3px 6px 3px 10px; font-size: 12px;
+}
+.source-chip button {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 2px 4px;
+}
+.source-chip button:hover { color: var(--danger); }
 .small-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .info-banner {
   background: var(--accent-dim);
@@ -222,11 +234,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 <body>
 
 <header>
-  <h1>IPBan Dashboard <span>логи + база в одном месте, загружаются автоматически</span></h1>
+  <h1>IPBan Dashboard <span>IPBan + RadiusProxy — все логи в одном месте</span></h1>
   <div class="file-controls">
-    <button class="file-btn" id="pickFolderBtn" type="button">📁 Папка IPBan</button>
+    <button class="file-btn" id="pickFolderBtn" type="button">➕ Добавить папку с логами</button>
     <label class="file-btn" id="folderInputFallbackLabel" style="display:none;">
-      📁 Папка IPBan (резервный способ)
+      ➕ Добавить папку (резервный способ)
       <input type="file" id="folderInput" webkitdirectory directory multiple>
     </label>
     <div class="path-group" id="logDayGroup">
@@ -252,18 +264,20 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     <button class="small-btn primary" id="refreshBtn">🔄 Обновить сейчас</button>
     <span class="file-status" id="autoLoadStatus">загрузка...</span>
   </div>
+  <div class="sources-list" id="sourcesList"></div>
 </header>
 
 <div class="info-banner" id="infoBanner">
   Автоматическая загрузка через <code>fetch()</code> не сработала (это нормально, если страница открыта как
   локальный файл — <code>file://</code> — как на скриншотах IPBan под Windows: браузер такие запросы блокирует).
-  Нажмите <b>«📁 Папка IPBan»</b> вверху страницы и выберите папку с логами и базой целиком — дашборд сам найдёт
-  в ней файлы логов (какое бы имя они ни носили — файлы опознаются по содержимому, по первым строкам с датой,
-  а не по конкретному имени) и файл <code>.sqlite</code>, объединит логи по их реальным меткам времени и покажет
-  свежий день по умолчанию (другой день можно выбрать в поле «Дата лога» вверху). Браузер запомнит доступ к папке,
-  так что «Обновить сейчас» и автообновление продолжат работать без повторного выбора. Ничего никуда не
-  загружается — всё остаётся в браузере. Если браузер не поддерживает выбор папки (например, старый Firefox),
-  используйте резервный способ:
+  Нажмите <b>«➕ Добавить папку с логами»</b> вверху страницы и выберите папку целиком — можно нажать эту кнопку
+  несколько раз для разных папок (например, отдельно папку IPBan и отдельно папку RadiusProxy) — все они
+  объединяются в одну картину. Дашборд сам найдёт в каждой папке файлы логов (какое бы имя они ни носили — файлы
+  опознаются по содержимому, по первым строкам с датой, а не по конкретному имени) и файл <code>.sqlite</code>,
+  объединит логи по их реальным меткам времени и покажет свежий день по умолчанию (другой день можно выбрать в
+  поле «Дата лога» вверху). Браузер запомнит доступ к папкам, так что «Обновить сейчас» и автообновление продолжат
+  работать без повторного выбора. Ничего никуда не загружается — всё остаётся в браузере. Если браузер не
+  поддерживает выбор папки (например, старый Firefox), используйте резервный способ:
   <div style="margin-top:6px;">
     <label class="file-btn" style="margin-left:6px;">
       📄 Лог вручную (можно выбрать сразу все файлы)
@@ -280,6 +294,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   <button class="tab-btn active" data-tab="overview">Обзор</button>
   <button class="tab-btn" data-tab="logs">Логи</button>
   <button class="tab-btn" data-tab="explorer">IP-адреса</button>
+  <button class="tab-btn" data-tab="users">Пользователи</button>
   <button class="tab-btn" data-tab="dbtables">Таблицы БД</button>
 </nav>
 
@@ -306,6 +321,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <option value="whitelist">Белый список</option>
       <option value="failed-login">Неудачный вход</option>
       <option value="login-attempt">Попытка входа</option>
+      <option value="auth-reject">RADIUS: отказ</option>
+      <option value="auth-accept">RADIUS: принято</option>
       <option value="info">Прочее</option>
     </select>
     <select id="logDatePreset">
@@ -355,6 +372,32 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   </div>
 </div>
 
+<div class="tab" id="tab-users">
+  <div class="toolbar">
+    <input type="text" id="userSearch" placeholder="Поиск по пользователю...">
+    <label class="chk"><input type="checkbox" id="userOnlyFailed"> только с отказами</label>
+    <span class="hint" id="userCountHint"></span>
+  </div>
+  <div class="hint" style="margin-bottom:10px;">
+    Из событий авторизации RadiusProxy (Authentications success/failed, AccessAccept/AccessReject) — IP здесь не
+    показывается, поскольку RadiusProxy видит только локальный адрес RADIUS-клиента, а не адрес реального
+    подключения.
+  </div>
+  <div class="table-wrap">
+    <table id="userTable">
+      <thead><tr>
+        <th data-k="username">Пользователь</th>
+        <th data-k="successCount">Успешных входов</th>
+        <th data-k="failCount">Отказов</th>
+        <th data-k="logCount">Всего событий</th>
+        <th data-k="firstSeen">Первое появление</th>
+        <th data-k="lastSeen">Последнее появление</th>
+      </tr></thead>
+      <tbody id="userTbody"><tr><td colspan="6" class="empty">Добавьте папку с логом RadiusProxy, чтобы увидеть список пользователей.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
 <div class="tab" id="tab-dbtables">
   <div class="toolbar">
     <select id="dbTableSelect"><option value="">— выберите таблицу —</option></select>
@@ -378,17 +421,21 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // State
   // ---------------------------------------------------------------------
   const state = {
-    logEntries: [],       // {time, timeMs, level, type, ips:[...], message, raw}
+    logEntries: [],       // {time, timeMs, level, type, ips:[...], username, message, raw}
     ipMap: new Map(),      // ip -> {ip, logCount, firstSeenMs, lastSeenMs, levels:{}, types:{}, failedCountLog, dbRow, dbTable, banned, whitelisted}
+    userMap: new Map(),    // username -> {username, logCount, successCount, failCount, firstSeenMs, lastSeenMs} — from RADIUS-style auth events
     dbTables: {},          // name -> {columns:[...], rows:[...] , totalRows}
     ipTableName: null,
     logsPage: 0,
     logsPageSize: 50,
     logsSort: { key: "time", dir: 1 },
     ipSort: { key: "failedCount", dir: -1 },
-    dirHandle: null,       // FileSystemDirectoryHandle, kept for silent re-scan on refresh
-    logFileEntries: [],    // [{ name, lastModified, dateStr, getFile() }] — files that look like logs
-    dbEntry: null,         // { name, lastModified, getFile() } — the newest .sqlite found
+    userSort: { key: "failCount", dir: -1 },
+    // Multiple independent folders (e.g. IPBan's own logs+db, plus a
+    // RadiusProxy/RDP logs folder) can be added and are all merged together.
+    // Each source: { id, label, dirHandle (nullable), logFileEntries: [...] }
+    sources: [],
+    dbEntry: null,         // { name, lastModified, getFile() } — the newest .sqlite found across all sources
   };
 
   function withTimeout(promise, ms, message) {
@@ -447,6 +494,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return Array.from(found);
   }
 
+  // RADIUS/RDP-proxy logs (RadiusProxy / Flexinets.Radius, seen in real
+  // FontvielleRDP traffic) report auth outcomes as "Authentications success
+  // for user X" / "Authentications failed for user X", plus the lower-level
+  // "AccessAccept sent" / "AccessReject sent" from the RADIUS layer itself.
   function classifyType(message) {
     const m = message.toLowerCase();
     if (/\bunban/.test(m)) return "unban";
@@ -454,7 +505,21 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     if (/\bban(ned|ning)?\b/.test(m)) return "ban";
     if (/failed (to )?login|login failed|invalid login|failed login/.test(m)) return "failed-login";
     if (/login attempt/.test(m)) return "login-attempt";
+    if (/authentications?\s+failed|access-?reject/.test(m)) return "auth-reject";
+    if (/authentications?\s+success|access-?accept/.test(m)) return "auth-accept";
     return "info";
+  }
+
+  // Pulls a username out of RadiusProxy-style messages: "... for user
+  // DOMAIN\name" or "Login: name, Domain: DOMAIN". Domain prefixes are
+  // stripped so both forms key to the same person.
+  function extractUsername(message) {
+    let m = message.match(/for user[:\s]+(\S+)/i) || message.match(/Login:\s*(\S+)/i);
+    if (!m) return null;
+    let u = m[1].replace(/[.,;:]+$/, "");
+    const bs = u.lastIndexOf("\\");
+    if (bs !== -1) u = u.slice(bs + 1);
+    return u || null;
   }
 
   function parseTimeToMs(str) {
@@ -544,6 +609,23 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return rec;
   }
 
+  // 127.0.0.1 shows up constantly in RadiusProxy logs as the local RADIUS
+  // client (the NPS/RD Gateway box talking to RadiusProxy on the same
+  // machine) — it's never a meaningful "who's attacking" IP, so it's kept
+  // out of the IP map to avoid drowning out real addresses from IPBan.
+  function isNoiseIp(ip) {
+    return ip === "127.0.0.1" || ip === "::1" || /^0\.0\.0\.0$/.test(ip);
+  }
+
+  function getUserRec(username) {
+    let rec = state.userMap.get(username);
+    if (!rec) {
+      rec = { username, logCount: 0, successCount: 0, failCount: 0, firstSeenMs: null, lastSeenMs: null };
+      state.userMap.set(username, rec);
+    }
+    return rec;
+  }
+
   // ---------------------------------------------------------------------
   // Log parsing
   // ---------------------------------------------------------------------
@@ -576,6 +658,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     entries.forEach(e => {
       e.type = classifyType(e.message);
       e.ips = extractIps(e.raw);
+      e.username = extractUsername(e.message);
     });
 
     return entries;
@@ -650,8 +733,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // and re-selecting files don't keep accumulating stale counts.
   function rebuildIpMap() {
     state.ipMap = new Map();
+    state.userMap = new Map();
     state.logEntries.forEach(e => {
       e.ips.forEach(ip => {
+        if (isNoiseIp(ip)) return;
         const rec = getIpRec(ip);
         rec.logCount++;
         rec.levels[e.level] = (rec.levels[e.level] || 0) + 1;
@@ -662,6 +747,15 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
           if (rec.lastSeenMs == null || e.timeMs > rec.lastSeenMs) rec.lastSeenMs = e.timeMs;
         }
       });
+      if (e.username && (e.type === "auth-accept" || e.type === "auth-reject")) {
+        const rec = getUserRec(e.username);
+        rec.logCount++;
+        if (e.type === "auth-accept") rec.successCount++; else rec.failCount++;
+        if (e.timeMs != null) {
+          if (rec.firstSeenMs == null || e.timeMs < rec.firstSeenMs) rec.firstSeenMs = e.timeMs;
+          if (rec.lastSeenMs == null || e.timeMs > rec.lastSeenMs) rec.lastSeenMs = e.timeMs;
+        }
+      }
     });
     applyDbToIpMap();
   }
@@ -769,6 +863,13 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const whitelistedCount = ips.filter(r => r.whitelisted).length;
     const failedEvents = entries.filter(e => e.type === "failed-login" || e.type === "login-attempt").length;
     const banEvents = entries.filter(e => e.type === "ban").length;
+    // Not entries.filter(type===...).length: RadiusProxy logs two lines per
+    // outcome ("Authentications success/failed for user X" and the lower
+    // level "AccessAccept/AccessReject sent"), both classified the same way,
+    // which would double-count here. state.userMap only tallies the line
+    // that has a username, so summing it gives the real per-event count.
+    let radiusAccepts = 0, radiusRejects = 0;
+    state.userMap.forEach(r => { radiusAccepts += r.successCount; radiusRejects += r.failCount; });
 
     let dateRange = "—";
     const times = entries.map(e => e.timeMs).filter(t => t != null);
@@ -784,6 +885,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       { num: failedEvents, lbl: "Событий неудачного входа", cls: "warn" },
       { num: banEvents, lbl: "Событий бана (лог)", cls: "danger" },
     ];
+    if (radiusAccepts || radiusRejects || state.userMap.size) {
+      cards.push({ num: radiusAccepts, lbl: "RADIUS: успешных входов", cls: "ok" });
+      cards.push({ num: radiusRejects, lbl: "RADIUS: отказано", cls: "danger" });
+    }
     document.getElementById("overviewCards").innerHTML = cards.map(c =>
       `<div class="card ${c.cls}"><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>`
     ).join("") + `<div class="card"><div class="num" style="font-size:14px;">${dateRange}</div><div class="lbl">Диапазон времени лога</div></div>`;
@@ -827,8 +932,15 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   }
 
   function badgeForType(type) {
-    const labels = { ban: "Бан", unban: "Разбан", whitelist: "Белый список", "failed-login": "Неудачный вход", "login-attempt": "Попытка входа", info: "Инфо" };
-    const cls = type === "ban" ? "banned" : type === "whitelist" ? "whitelisted" : type === "unban" ? "seen" : "info";
+    const labels = {
+      ban: "Бан", unban: "Разбан", whitelist: "Белый список",
+      "failed-login": "Неудачный вход", "login-attempt": "Попытка входа",
+      "auth-reject": "RADIUS: отказ", "auth-accept": "RADIUS: принято",
+      info: "Инфо",
+    };
+    const cls = type === "ban" || type === "auth-reject" ? "banned"
+      : type === "whitelist" || type === "auth-accept" ? "whitelisted"
+      : type === "unban" ? "seen" : "info";
     return `<span class="badge ${cls}">${labels[type] || type}</span>`;
   }
 
@@ -1006,6 +1118,78 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     tr.after(detail);
   }
 
+  // ---------------------------------------------------------------------
+  // Rendering: Users tab (RADIUS/RadiusProxy auth events)
+  // ---------------------------------------------------------------------
+  function filteredUsers() {
+    const q = document.getElementById("userSearch").value.trim().toLowerCase();
+    const onlyFailed = document.getElementById("userOnlyFailed").checked;
+    return Array.from(state.userMap.values()).filter(r => {
+      if (q && !r.username.toLowerCase().includes(q)) return false;
+      if (onlyFailed && !r.failCount) return false;
+      return true;
+    });
+  }
+
+  function renderUsers() {
+    let rows = filteredUsers();
+    const { key, dir } = state.userSort;
+    rows = rows.slice().sort((a, b) => {
+      const map = {
+        username: [a.username, b.username],
+        successCount: [a.successCount, b.successCount],
+        failCount: [a.failCount, b.failCount],
+        logCount: [a.logCount, b.logCount],
+        firstSeen: [a.firstSeenMs || 0, b.firstSeenMs || 0],
+        lastSeen: [a.lastSeenMs || 0, b.lastSeenMs || 0],
+      };
+      const [av, bv] = map[key] || [0, 0];
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+
+    document.getElementById("userCountHint").textContent = `${rows.length} пользователь(ей)`;
+
+    const tbody = document.getElementById("userTbody");
+    if (!state.userMap.size) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">Добавьте папку с логом RadiusProxy, чтобы увидеть список пользователей.</td></tr>`;
+      return;
+    }
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr class="user-row" data-user="${escapeHtml(r.username)}" style="cursor:pointer;">
+        <td class="mono">${escapeHtml(r.username)}</td>
+        <td>${r.successCount ? `<span class="badge whitelisted">${r.successCount}</span>` : "0"}</td>
+        <td>${r.failCount ? `<span class="badge banned">${r.failCount}</span>` : "0"}</td>
+        <td>${r.logCount || 0}</td>
+        <td class="mono">${fmtTime(r.firstSeenMs)}</td>
+        <td class="mono">${fmtTime(r.lastSeenMs)}</td>
+      </tr>`).join("");
+
+    Array.from(tbody.querySelectorAll(".user-row")).forEach(tr => {
+      tr.addEventListener("click", () => toggleUserDetail(tr));
+    });
+  }
+
+  function toggleUserDetail(tr) {
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains("detail-row")) { next.remove(); return; }
+    document.querySelectorAll(".detail-row").forEach(el => el.remove());
+    const username = tr.getAttribute("data-user");
+    const matches = state.logEntries.filter(e => e.username === username && (e.type === "auth-accept" || e.type === "auth-reject"));
+    const detail = document.createElement("tr");
+    detail.className = "detail-row";
+    const body = matches.length
+      ? matches.map(e => `[${e.time || "?"}] (${e.type === "auth-accept" ? "успех" : "отказ"}) ${e.message}`).join("\n\n")
+      : "Нет связанных событий авторизации для этого пользователя.";
+    detail.innerHTML = `<td colspan="6"><div class="detail-box">${escapeHtml(body)}</div></td>`;
+    tr.after(detail);
+  }
+
   function exportCsv() {
     const rows = filteredIps();
     const header = ["ip", "status", "failedCountDb", "failedCountLog", "logCount", "firstSeen", "lastSeen", "userName", "country", "banDate", "banEndDate"];
@@ -1064,6 +1248,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     renderOverview();
     renderLogs();
     renderIpExplorer();
+    renderUsers();
     populateDbTableSelect();
     renderRawDbTable();
   }
@@ -1115,6 +1300,17 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
   document.getElementById("dbTableSelect").addEventListener("change", renderRawDbTable);
 
+  ["userSearch", "userOnlyFailed"].forEach(id => {
+    document.getElementById(id).addEventListener("input", renderUsers);
+  });
+  document.querySelectorAll("#userTable th").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.k;
+      if (state.userSort.key === k) state.userSort.dir *= -1; else { state.userSort.key = k; state.userSort.dir = -1; }
+      renderUsers();
+    });
+  });
+
   document.getElementById("logFileInput").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -1151,13 +1347,36 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // Folder scanning: files are identified by content (see looksLikeLogFile),
   // not by a specific filename, and grouped by the calendar day they were
   // last modified so the UI can default to "just the freshest day" instead
-  // of always re-parsing every rotated log file in the folder.
+  // of always re-parsing every rotated log file. Multiple independent
+  // folders (e.g. IPBan's own logs+db, plus a separate RadiusProxy/RDP logs
+  // folder) can be added at once and are all merged together.
   // -----------------------------------------------------------------------
+  function allLogFileEntries() {
+    return state.sources.flatMap(s => s.logFileEntries);
+  }
+
+  function renderSourcesList() {
+    const box = document.getElementById("sourcesList");
+    if (!state.sources.length) { box.innerHTML = ""; return; }
+    box.innerHTML = state.sources.map((s, i) => `
+      <span class="source-chip">
+        📁 ${escapeHtml(s.label)} (${s.logFileEntries.length} файл(ов)${s.dirHandle ? "" : ", разово"})
+        <button type="button" data-idx="${i}" title="Убрать эту папку">✕</button>
+      </span>`).join("");
+    box.querySelectorAll("button[data-idx]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.sources.splice(Number(btn.dataset.idx), 1);
+        afterSourcesChanged();
+      });
+    });
+  }
+
   function populateLogDayPicker() {
     const group = document.getElementById("logDayGroup");
-    if (!state.logFileEntries.length) { group.classList.remove("show"); return; }
+    const all = allLogFileEntries();
+    if (!all.length) { group.classList.remove("show"); return; }
     group.classList.add("show");
-    const dates = Array.from(new Set(state.logFileEntries.map(e => e.dateStr))).sort();
+    const dates = Array.from(new Set(all.map(e => e.dateStr))).sort();
     const picker = document.getElementById("logDayPicker");
     picker.min = dates[0];
     picker.max = dates[dates.length - 1];
@@ -1165,26 +1384,27 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       picker.value = dates[dates.length - 1]; // default to the freshest day
     }
     document.getElementById("logDayHint").textContent =
-      `доступно ${dates.length === 1 ? "1 дата" : dates.length + " дат"} (${dates[0]} — ${dates[dates.length - 1]}), файлов: ${state.logFileEntries.length}`;
+      `доступно ${dates.length === 1 ? "1 дата" : dates.length + " дат"} (${dates[0]} — ${dates[dates.length - 1]}), файлов: ${all.length}`;
   }
 
   async function reloadSelectedDay() {
     const showAll = document.getElementById("logDayAll").checked;
     const day = document.getElementById("logDayPicker").value;
-    const chosen = (showAll || !day) ? state.logFileEntries : state.logFileEntries.filter(e => e.dateStr === day);
+    const all = allLogFileEntries();
+    const chosen = (showAll || !day) ? all : all.filter(e => e.dateStr === day);
 
     const parts = [];
-    if (state.logFileEntries.length) {
+    if (all.length) {
       if (chosen.length) {
         const files = await Promise.all(chosen.map(e => e.getFile()));
         state.logEntries = await parseLogFiles(files);
-        parts.push(`лог: ${chosen.length} файл(ов)${(!showAll && day) ? " за " + day : ""}, ${state.logEntries.length} строк`);
+        parts.push(`лог: ${chosen.length} файл(ов)${(!showAll && day) ? " за " + day : ""} из ${state.sources.length} источник(ов), ${state.logEntries.length} строк`);
       } else {
         state.logEntries = [];
         parts.push(`лог: нет файлов за ${day}`);
       }
     } else {
-      parts.push("лог: в папке не найдено файлов, похожих на лог по содержимому");
+      parts.push("лог: файлов, похожих на лог по содержимому, пока не найдено");
     }
 
     if (state.dbEntry) {
@@ -1198,17 +1418,23 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         parts.push(`база: ошибка (${err.message})`);
       }
     } else {
-      parts.push("база: файл .sqlite не найден в папке");
+      parts.push("база: файл .sqlite не найден");
     }
 
     rebuildIpMap();
     document.getElementById("infoBanner").classList.remove("show");
-    setAutoLoadStatus(`${parts.join(" · ")} · из папки, обновлено в ${new Date().toLocaleTimeString("ru-RU")}`);
+    setAutoLoadStatus(`${parts.join(" · ")} · обновлено в ${new Date().toLocaleTimeString("ru-RU")}`);
     renderAll();
   }
 
-  // Re-lists the live directory handle (picks up files added/changed since
-  // the last scan) without re-prompting the user for folder access.
+  async function afterSourcesChanged() {
+    renderSourcesList();
+    populateLogDayPicker();
+    await reloadSelectedDay();
+  }
+
+  // Re-lists a live directory handle (picks up files added/changed since the
+  // last scan) without re-prompting the user for folder access.
   async function listDirEntries(dirHandle) {
     const handles = [];
     for await (const [name, handle] of dirHandle.entries()) {
@@ -1221,17 +1447,30 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     }));
   }
 
+  // Picks the single newest .sqlite across every scanned source (IPBan's own
+  // folder is normally the only one that has one, but this stays correct if
+  // more than one folder happens to contain a database).
+  function pickNewestDbEntry() {
+    const candidates = state.sources.map(s => s.dbEntry).filter(Boolean);
+    candidates.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+    state.dbEntry = candidates[0] || null;
+  }
+
+  async function rescanSource(source) {
+    const entries = source.dirHandle
+      ? await listDirEntries(source.dirHandle)
+      : source.snapshotEntries || [];
+    const { dbEntry, logEntries } = await classifyEntries(entries);
+    source.dbEntry = dbEntry;
+    source.logFileEntries = logEntries;
+  }
+
   async function rescanAndReload() {
-    setAutoLoadStatus("сканирование папки...");
+    setAutoLoadStatus("сканирование папок...");
     try {
-      if (state.dirHandle) {
-        const entries = await listDirEntries(state.dirHandle);
-        const { dbEntry, logEntries } = await classifyEntries(entries);
-        state.dbEntry = dbEntry;
-        state.logFileEntries = logEntries;
-        populateLogDayPicker();
-      }
-      await reloadSelectedDay();
+      await Promise.all(state.sources.map(s => rescanSource(s)));
+      pickNewestDbEntry();
+      await afterSourcesChanged();
     } catch (err) {
       console.error(err);
       setAutoLoadStatus("ошибка сканирования папки: " + err.message);
@@ -1241,8 +1480,12 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("pickFolderBtn").addEventListener("click", async () => {
     try {
       const handle = await window.showDirectoryPicker();
-      state.dirHandle = handle;
-      await rescanAndReload();
+      const source = { label: handle.name || `папка ${state.sources.length + 1}`, dirHandle: handle, logFileEntries: [], dbEntry: null };
+      state.sources.push(source);
+      setAutoLoadStatus("сканирование папки...");
+      await rescanSource(source);
+      pickNewestDbEntry();
+      await afterSourcesChanged();
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error(err);
@@ -1257,15 +1500,14 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("folderInput").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    state.dirHandle = null;
-    const entries = files.map(f => ({ name: f.name, lastModified: f.lastModified, getFile: async () => f }));
+    const snapshotEntries = files.map(f => ({ name: f.name, lastModified: f.lastModified, getFile: async () => f }));
+    const source = { label: (files[0].webkitRelativePath || files[0].name).split("/")[0] || `папка ${state.sources.length + 1}`, dirHandle: null, snapshotEntries, logFileEntries: [], dbEntry: null };
+    state.sources.push(source);
     setAutoLoadStatus("сканирование папки...");
     try {
-      const { dbEntry, logEntries } = await classifyEntries(entries);
-      state.dbEntry = dbEntry;
-      state.logFileEntries = logEntries;
-      populateLogDayPicker();
-      await reloadSelectedDay();
+      await rescanSource(source);
+      pickNewestDbEntry();
+      await afterSourcesChanged();
     } catch (err) {
       console.error(err);
       setAutoLoadStatus("ошибка: " + err.message);
@@ -1348,7 +1590,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // refresh/auto-refresh should keep using it instead of falling back to the
   // fetch()-by-fixed-name path.
   function isFolderModeActive() {
-    return !!(state.dirHandle || state.logFileEntries.length || state.dbEntry);
+    return state.sources.length > 0;
   }
 
   function doRefresh() {
