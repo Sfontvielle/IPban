@@ -84,8 +84,21 @@ header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
 }
 .file-btn:hover { border-color: var(--accent); }
 .file-btn input { display: none; }
-.file-status { font-size: 12px; color: var(--text-dim); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-status { font-size: 12px; color: var(--text-dim); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hint { font-size: 12px; color: var(--text-dim); }
+.path-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.path-group input[type="text"] { min-width: 150px; font-size: 12px; padding: 5px 8px; }
+.small-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.info-banner {
+  background: var(--accent-dim);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 20px;
+  font-size: 12.5px;
+  display: none;
+}
+.info-banner.show { display: block; }
+.info-banner code { background: var(--bg-elevated); }
 nav {
   display: flex;
   gap: 4px;
@@ -206,20 +219,42 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 <body>
 
 <header>
-  <h1>IPBan Dashboard <span>логи + база в одном месте</span></h1>
+  <h1>IPBan Dashboard <span>логи + база в одном месте, загружаются автоматически</span></h1>
   <div class="file-controls">
-    <label class="file-btn">
-      📄 Загрузить лог (ipbanlog.txt)
-      <input type="file" id="logFileInput" accept=".txt,.log">
-    </label>
-    <span class="file-status" id="logFileStatus">файл не выбран</span>
-    <label class="file-btn">
-      🗄 Загрузить базу (ipban.sqlite)
-      <input type="file" id="dbFileInput" accept=".sqlite,.db,.sqlite3">
-    </label>
-    <span class="file-status" id="dbFileStatus">файл не выбран</span>
+    <div class="path-group">
+      <span>Лог:</span>
+      <input type="text" id="logPathInput" value="ipbanlog.txt" title="URL или относительный путь к файлу лога IPBan">
+    </div>
+    <div class="path-group">
+      <span>БД:</span>
+      <input type="text" id="dbPathInput" value="ipban.sqlite" title="URL или относительный путь к файлу базы IPBan">
+    </div>
+    <select id="autoRefreshSelect" title="Автоматически перечитывать лог и базу через заданный интервал">
+      <option value="0">Автообновление: выкл</option>
+      <option value="30">каждые 30 сек</option>
+      <option value="60">каждую минуту</option>
+      <option value="300">каждые 5 минут</option>
+    </select>
+    <button class="small-btn primary" id="refreshBtn">🔄 Обновить сейчас</button>
+    <span class="file-status" id="autoLoadStatus">загрузка...</span>
   </div>
 </header>
+
+<div class="info-banner" id="infoBanner">
+  Автоматическая загрузка не сработала. Дашборд пытается получить файлы по указанным выше путям через
+  <code>fetch()</code> — это работает, только если страница открыта через веб-сервер (например,
+  <code>python3 -m http.server</code> в папке с <code>ipbanlog.txt</code> и <code>ipban.sqlite</code>, либо через
+  ваш существующий веб-сервер/nginx), а не как локальный файл (<code>file://</code>). Проверьте пути к файлам выше и
+  нажмите «Обновить сейчас», либо загрузите файлы вручную:
+  <label class="file-btn" style="margin-left:6px;">
+    📄 Лог вручную
+    <input type="file" id="logFileInput" accept=".txt,.log">
+  </label>
+  <label class="file-btn" style="margin-left:6px;">
+    🗄 БД вручную
+    <input type="file" id="dbFileInput" accept=".sqlite,.db,.sqlite3">
+  </label>
+</div>
 
 <nav>
   <button class="tab-btn active" data-tab="overview">Обзор</button>
@@ -253,12 +288,24 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <option value="login-attempt">Попытка входа</option>
       <option value="info">Прочее</option>
     </select>
+    <select id="logDatePreset">
+      <option value="">Любая дата</option>
+      <option value="24h">Последние 24 часа</option>
+      <option value="7d">Последние 7 дней</option>
+      <option value="30d">Последние 30 дней</option>
+      <option value="custom">Свой диапазон...</option>
+    </select>
+    <span id="logDateCustom" style="display:none; gap:8px; align-items:center;">
+      <input type="datetime-local" id="logDateFrom">
+      <span class="hint">—</span>
+      <input type="datetime-local" id="logDateTo">
+    </span>
     <span class="hint" id="logCountHint"></span>
   </div>
   <div class="table-wrap">
     <table id="logsTable">
       <thead><tr><th data-k="time">Время</th><th data-k="level">Уровень</th><th data-k="type">Тип</th><th data-k="ips">IP</th><th data-k="message">Сообщение</th></tr></thead>
-      <tbody id="logsTbody"><tr><td colspan="5" class="empty">Лог не загружен. Нажмите «Загрузить лог» вверху страницы.</td></tr></tbody>
+      <tbody id="logsTbody"><tr><td colspan="5" class="empty">Лог ещё не загружен. Дашборд пытается подтянуть его автоматически — если не получилось, см. подсказку вверху страницы.</td></tr></tbody>
     </table>
   </div>
   <div class="pager" id="logsPager" style="margin-top:10px;"></div>
@@ -294,7 +341,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     <span class="hint" id="dbTableHint"></span>
   </div>
   <div class="table-wrap">
-    <table id="rawDbTable"><thead></thead><tbody><tr><td class="empty">База данных не загружена. Нажмите «Загрузить базу» вверху страницы.</td></tr></tbody></table>
+    <table id="rawDbTable"><thead></thead><tbody><tr><td class="empty">База данных ещё не загружена. Дашборд пытается подтянуть её автоматически — если не получилось, см. подсказку вверху страницы.</td></tr></tbody></table>
   </div>
 </div>
 
@@ -392,6 +439,66 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const d = new Date(ms);
     if (isNaN(d.getTime())) return "—";
     return d.toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+  }
+
+  // Turns a BLOB column (sql.js returns these as Uint8Array/plain arrays) into
+  // a readable string: 4 bytes -> IPv4 dotted, 16 bytes -> IPv6 hex groups,
+  // otherwise try to decode as UTF-8 text.
+  function blobToReadable(val) {
+    if (!(val instanceof Uint8Array) && !Array.isArray(val)) return String(val);
+    const bytes = Array.from(val);
+    if (bytes.length === 4) return bytes.join(".");
+    if (bytes.length === 16) {
+      const groups = [];
+      for (let i = 0; i < 16; i += 2) groups.push(((bytes[i] << 8) | bytes[i + 1]).toString(16));
+      return groups.join(":");
+    }
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes));
+      if (/^[\x20-\x7E]*$/.test(text)) return text;
+    } catch (e) { /* not text */ }
+    return bytes.join(",");
+  }
+
+  const DATE_COLUMN_RE = /date|time|seen|login$|created|updated|expire/i;
+
+  // IPBan stores these as Unix epoch milliseconds (or occasionally seconds);
+  // convert to a readable timestamp when the column name suggests a date.
+  function formatEpochIfDate(colName, value) {
+    if (typeof value !== "number" || !DATE_COLUMN_RE.test(colName)) return null;
+    if (value <= 0) return null;
+    let ms;
+    if (value > 1e11 && value < 1e14) ms = value;
+    else if (value > 1e8 && value < 1e11) ms = value * 1000;
+    else return null;
+    return fmtTime(ms);
+  }
+
+  function formatDbCell(colName, value) {
+    if (value == null) return "—";
+    if (value instanceof Uint8Array || Array.isArray(value)) return blobToReadable(value);
+    const asDate = formatEpochIfDate(colName, value);
+    if (asDate) return asDate;
+    return String(value);
+  }
+
+  const RU_COLUMN_LABELS = {
+    ipaddress: "IP (raw)",
+    ipaddresstext: "IP-адрес",
+    failedlogincount: "Неудачных входов",
+    lastfailedlogin: "Последний неудачный вход",
+    bandate: "Дата бана",
+    banenddate: "Окончание бана",
+    banstartdate: "Начало бана",
+    state: "Статус (код)",
+    username: "Пользователь",
+    source: "Источник",
+    iswhitelisted: "В белом списке",
+    country: "Страна",
+  };
+
+  function ruColumnLabel(col) {
+    return RU_COLUMN_LABELS[col.toLowerCase()] || col;
   }
 
   function getIpRec(ip) {
@@ -500,7 +607,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     if (ipTableName) {
       const table = state.dbTables[ipTableName];
       const cols = table.columns;
-      const ipCol = findCol(cols, ["ipaddress", "ip_address", "ip"]);
+      // prefer a human-readable text column (e.g. "IPAddressText") over the
+      // raw BLOB "IPAddress" column so it lines up with IPs parsed from the log
+      const ipTextCol = findCol(cols, ["ipaddresstext"]);
+      const ipRawCol = cols.find(c => /ipaddress/i.test(c) && c !== ipTextCol) || findCol(cols, ["ip_address", "ip"]);
+      const ipCol = ipTextCol || ipRawCol;
       const failedCol = findCol(cols, ["failedlogincount", "failedlogins", "failedcount", "count"]);
       const lastFailedCol = findCol(cols, ["lastfailedlogin", "lastfailed", "lastlogin"]);
       const banDateCol = findCol(cols, ["bandate", "banstart", "banned"]);
@@ -511,17 +622,21 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
       if (ipCol) {
         table.rows.forEach(row => {
-          const ip = row[ipCol];
-          if (!ip) return;
-          const rec = getIpRec(String(ip));
+          const rawIp = row[ipCol];
+          if (!rawIp) return;
+          const ip = (rawIp instanceof Uint8Array || Array.isArray(rawIp)) ? blobToReadable(rawIp) : String(rawIp);
+          const rec = getIpRec(ip);
           rec.dbRow = row;
           rec.dbTable = ipTableName;
           rec.banned = banDateCol ? !!row[banDateCol] : false;
           rec.whitelisted = whitelistCol ? !!row[whitelistCol] && row[whitelistCol] !== 0 : false;
           rec.failedCountDb = failedCol ? row[failedCol] : null;
           rec.lastFailedDb = lastFailedCol ? row[lastFailedCol] : null;
+          rec.lastFailedDbCol = lastFailedCol;
           rec.banDate = banDateCol ? row[banDateCol] : null;
+          rec.banDateCol = banDateCol;
           rec.banEndDate = banEndCol ? row[banEndCol] : null;
+          rec.banEndDateCol = banEndCol;
           rec.userName = userCol ? row[userCol] : null;
           rec.country = countryCol ? row[countryCol] : null;
         });
@@ -550,7 +665,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       { num: entries.length, lbl: "Строк лога разобрано", cls: "" },
       { num: ips.length, lbl: "Уникальных IP", cls: "accent" },
       { num: bannedCount, lbl: "Забанено (БД)", cls: "danger" },
-      { num: whitelistedCount, lbl: "В whitelist (БД)", cls: "ok" },
+      { num: whitelistedCount, lbl: "В белом списке (БД)", cls: "ok" },
       { num: failedEvents, lbl: "Событий неудачного входа", cls: "warn" },
       { num: banEvents, lbl: "Событий бана (лог)", cls: "danger" },
     ];
@@ -602,13 +717,33 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return `<span class="badge ${cls}">${labels[type] || type}</span>`;
   }
 
+  function currentDateRange() {
+    const preset = document.getElementById("logDatePreset").value;
+    const now = Date.now();
+    if (preset === "24h") return { from: now - 24 * 3600 * 1000, to: now };
+    if (preset === "7d") return { from: now - 7 * 24 * 3600 * 1000, to: now };
+    if (preset === "30d") return { from: now - 30 * 24 * 3600 * 1000, to: now };
+    if (preset === "custom") {
+      const fromVal = document.getElementById("logDateFrom").value;
+      const toVal = document.getElementById("logDateTo").value;
+      return {
+        from: fromVal ? new Date(fromVal).getTime() : null,
+        to: toVal ? new Date(toVal).getTime() : null,
+      };
+    }
+    return { from: null, to: null };
+  }
+
   function filteredLogs() {
     const q = document.getElementById("logSearch").value.trim().toLowerCase();
     const level = document.getElementById("logLevelFilter").value;
     const type = document.getElementById("logTypeFilter").value;
+    const { from, to } = currentDateRange();
     return state.logEntries.filter(e => {
       if (level && e.level !== level) return false;
       if (type && e.type !== type) return false;
+      if (from != null && (e.timeMs == null || e.timeMs < from)) return false;
+      if (to != null && (e.timeMs == null || e.timeMs > to)) return false;
       if (q) {
         const hay = (e.message + " " + e.ips.join(" ")).toLowerCase();
         if (!hay.includes(q)) return false;
@@ -641,7 +776,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
     const tbody = document.getElementById("logsTbody");
     if (!state.logEntries.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty">Лог не загружен. Нажмите «Загрузить лог» вверху страницы.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">Лог ещё не загружен. Дашборд пытается подтянуть его автоматически — если не получилось, см. подсказку вверху страницы.</td></tr>`;
     } else if (!pageRows.length) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
     } else {
@@ -677,9 +812,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
   function ipExtraInfo(rec) {
     const parts = [];
-    if (rec.userName) parts.push(`user: ${escapeHtml(String(rec.userName))}`);
-    if (rec.country) parts.push(`country: ${escapeHtml(String(rec.country))}`);
-    if (rec.banEndDate) parts.push(`ban end: ${escapeHtml(String(rec.banEndDate))}`);
+    if (rec.userName) parts.push(`пользователь: ${escapeHtml(String(rec.userName))}`);
+    if (rec.country) parts.push(`страна: ${escapeHtml(String(rec.country))}`);
+    if (rec.banDate) parts.push(`бан с: ${escapeHtml(formatDbCell(rec.banDateCol || "bandate", rec.banDate))}`);
+    if (rec.banEndDate) parts.push(`окончание бана: ${escapeHtml(formatDbCell(rec.banEndDateCol || "banenddate", rec.banEndDate))}`);
     return parts.join(" · ") || "—";
   }
 
@@ -761,7 +897,12 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const lines = [header.join(",")];
     rows.forEach(r => {
       const status = r.banned ? "banned" : r.whitelisted ? "whitelisted" : "seen";
-      const vals = [r.ip, status, r.failedCountDb ?? "", r.failedCountLog ?? "", r.logCount ?? "", fmtTime(r.firstSeenMs), fmtTime(r.lastSeenMs), r.userName ?? "", r.country ?? "", r.banDate ?? "", r.banEndDate ?? ""];
+      const vals = [
+        r.ip, status, r.failedCountDb ?? "", r.failedCountLog ?? "", r.logCount ?? "",
+        fmtTime(r.firstSeenMs), fmtTime(r.lastSeenMs), r.userName ?? "", r.country ?? "",
+        r.banDate ? formatDbCell(r.banDateCol || "bandate", r.banDate) : "",
+        r.banEndDate ? formatDbCell(r.banEndDateCol || "banenddate", r.banEndDate) : "",
+      ];
       lines.push(vals.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -795,9 +936,9 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     }
     const { columns, rows, totalRows } = state.dbTables[name];
     hint.textContent = rows.length < totalRows ? `показаны первые ${rows.length} из ${totalRows} строк` : `${totalRows} строк`;
-    table.querySelector("thead").innerHTML = `<tr>${columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr>`;
+    table.querySelector("thead").innerHTML = `<tr>${columns.map(c => `<th title="исходное имя столбца: ${escapeHtml(c)}">${escapeHtml(ruColumnLabel(c))}</th>`).join("")}</tr>`;
     table.querySelector("tbody").innerHTML = rows.length
-      ? rows.map(row => `<tr>${columns.map(c => `<td class="mono">${row[c] == null ? "—" : escapeHtml(String(row[c]))}</td>`).join("")}</tr>`).join("")
+      ? rows.map(row => `<tr>${columns.map(c => `<td class="mono">${escapeHtml(formatDbCell(c, row[c]))}</td>`).join("")}</tr>`).join("")
       : `<tr><td colspan="${columns.length}" class="empty">Таблица пуста.</td></tr>`;
   }
 
@@ -830,8 +971,13 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     });
   });
 
-  ["logSearch", "logLevelFilter", "logTypeFilter"].forEach(id => {
+  ["logSearch", "logLevelFilter", "logTypeFilter", "logDateFrom", "logDateTo"].forEach(id => {
     document.getElementById(id).addEventListener("input", () => { state.logsPage = 0; renderLogs(); });
+  });
+  document.getElementById("logDatePreset").addEventListener("change", (e) => {
+    document.getElementById("logDateCustom").style.display = e.target.value === "custom" ? "inline-flex" : "none";
+    state.logsPage = 0;
+    renderLogs();
   });
   document.querySelectorAll("#logsTable th").forEach(th => {
     th.addEventListener("click", () => {
@@ -857,29 +1003,92 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("logFileInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    document.getElementById("logFileStatus").textContent = "загрузка...";
+    setAutoLoadStatus("загрузка лога из файла...");
     const text = await file.text();
     state.logEntries = parseLogText(text);
-    document.getElementById("logFileStatus").textContent = `${file.name} (${state.logEntries.length} строк)`;
+    setAutoLoadStatus(`лог: ${file.name} (${state.logEntries.length} строк, загружен вручную)`);
+    document.getElementById("infoBanner").classList.remove("show");
     renderAll();
   });
 
   document.getElementById("dbFileInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    document.getElementById("dbFileStatus").textContent = "загрузка...";
+    setAutoLoadStatus("загрузка базы из файла...");
     try {
       const buf = await file.arrayBuffer();
       await loadDb(buf);
-      document.getElementById("dbFileStatus").textContent = `${file.name} (${Object.keys(state.dbTables).length} табл.)`;
+      setAutoLoadStatus(`база: ${file.name} (${Object.keys(state.dbTables).length} табл., загружена вручную)`);
+      document.getElementById("infoBanner").classList.remove("show");
     } catch (err) {
       console.error(err);
-      document.getElementById("dbFileStatus").textContent = "ошибка загрузки: " + err.message;
+      setAutoLoadStatus("ошибка загрузки базы: " + err.message);
     }
     renderAll();
   });
 
+  // -----------------------------------------------------------------------
+  // Automatic loading: the dashboard is meant to sit next to ipbanlog.txt /
+  // ipban.sqlite (or be pointed at URLs serving them) and pull them itself,
+  // instead of requiring the user to pick files by hand every time.
+  // -----------------------------------------------------------------------
+  function setAutoLoadStatus(text) {
+    document.getElementById("autoLoadStatus").textContent = text;
+  }
+
+  let autoRefreshTimer = null;
+
+  async function fetchLog(path) {
+    const res = await fetch(path, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    state.logEntries = parseLogText(text);
+    return state.logEntries.length;
+  }
+
+  async function fetchDb(path) {
+    const res = await fetch(path, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    await loadDb(buf);
+    return Object.keys(state.dbTables).length;
+  }
+
+  async function autoLoadAll(isManualRefresh) {
+    const logPath = document.getElementById("logPathInput").value.trim();
+    const dbPath = document.getElementById("dbPathInput").value.trim();
+    setAutoLoadStatus("загрузка...");
+
+    const [logResult, dbResult] = await Promise.allSettled([
+      logPath ? fetchLog(logPath) : Promise.reject(new Error("путь не указан")),
+      dbPath ? fetchDb(dbPath) : Promise.reject(new Error("путь не указан")),
+    ]);
+
+    const parts = [];
+    let anyError = false;
+    if (logResult.status === "fulfilled") parts.push(`лог: ${logResult.value} строк`);
+    else { anyError = true; parts.push(`лог: ошибка (${logResult.reason.message})`); }
+    if (dbResult.status === "fulfilled") parts.push(`база: ${dbResult.value} табл.`);
+    else { anyError = true; parts.push(`база: ошибка (${dbResult.reason.message})`); }
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("ru-RU");
+    setAutoLoadStatus(`${parts.join(" · ")} · обновлено в ${timeStr}`);
+    document.getElementById("infoBanner").classList.toggle("show", anyError);
+
+    renderAll();
+  }
+
+  document.getElementById("refreshBtn").addEventListener("click", () => autoLoadAll(true));
+
+  document.getElementById("autoRefreshSelect").addEventListener("change", (e) => {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    const seconds = Number(e.target.value);
+    if (seconds > 0) autoRefreshTimer = setInterval(() => autoLoadAll(false), seconds * 1000);
+  });
+
   renderAll();
+  autoLoadAll(false);
 })();
 </script>
 </body>
