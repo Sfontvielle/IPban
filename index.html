@@ -6,7 +6,7 @@
 <title>IPBan Dashboard</title>
 <style>
 :root {
-  --bg: #f4f6f8;
+  --bg: #f1f3f9;
   --bg-panel: #ffffff;
   --bg-elevated: #ffffff;
   --border: #e1e5ea;
@@ -20,8 +20,11 @@
   --warn-dim: #fdf3d9;
   --ok: #1a7f4e;
   --ok-dim: #dcf3e6;
+  --radius-c: #7c3aed;
+  --radius-c-dim: #ede4fd;
   --row-hover: #f0f4f9;
   --shadow: 0 1px 3px rgba(20,30,50,0.08);
+  --header-grad: linear-gradient(100deg, #2f6feb 0%, #6d5bec 55%, #7c3aed 100%);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -39,8 +42,11 @@
     --warn-dim: #3a3016;
     --ok: #3fcc86;
     --ok-dim: #163a29;
+    --radius-c: #b795f7;
+    --radius-c-dim: #2c2340;
     --row-hover: #242a35;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --header-grad: linear-gradient(100deg, #1d3f8f 0%, #3d3096 55%, #4c2a8f 100%);
   }
 }
 * { box-sizing: border-box; }
@@ -55,20 +61,46 @@ header {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 20px;
-  background: var(--bg-panel);
+  padding: 14px 20px;
+  background: var(--header-grad);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
   position: sticky;
   top: 0;
   z-index: 20;
+  box-shadow: 0 2px 10px rgba(30,20,80,0.18);
 }
 header h1 {
-  font-size: 17px;
+  font-size: 18px;
   margin: 0;
   white-space: nowrap;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
+header h1 span { color: rgba(255,255,255,0.75); font-weight: 400; font-size: 12px; }
+header .path-group,
+header .file-status,
+header label.chk { color: rgba(255,255,255,0.85); }
+header .path-group input,
+header select {
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #fff;
+}
+header .path-group input::placeholder { color: rgba(255,255,255,0.6); }
+header .file-btn {
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: #fff;
+}
+header .file-btn:hover { background: rgba(255,255,255,0.28); border-color: #fff; }
+header .small-btn:not(.primary) {
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: #fff;
+}
 .file-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-left: auto; }
 .file-btn {
   display: inline-flex;
@@ -103,7 +135,8 @@ header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
   font-size: 13px; line-height: 1; padding: 2px 4px;
 }
 .source-chip button:hover { color: var(--danger); }
-.small-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.small-btn.primary { background: #fff; border-color: #fff; color: #4636c4; font-weight: 700; }
+.small-btn.primary:hover { background: #f0edff; }
 .info-banner {
   background: var(--accent-dim);
   color: var(--text);
@@ -114,6 +147,8 @@ header h1 span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
 }
 .info-banner.show { display: block; }
 .info-banner code { background: var(--bg-elevated); }
+.info-banner.restore-banner { background: var(--ok-dim); display: none; align-items: center; gap: 10px; }
+.info-banner.restore-banner.show { display: flex; }
 nav {
   display: flex;
   gap: 4px;
@@ -138,20 +173,33 @@ main { padding: 18px 20px 40px 20px; max-width: 1400px; margin: 0 auto; }
 .tab { display: none; }
 .tab.active { display: block; }
 
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
   border-radius: 10px;
   padding: 14px 16px;
   box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform .12s ease, box-shadow .12s ease;
 }
+.card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(30,20,80,0.12); }
+.card .icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
 .card .num { font-size: 24px; font-weight: 700; line-height: 1.2; }
 .card .lbl { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.card.accent { border-left-color: var(--accent); }
 .card.accent .num { color: var(--accent); }
+.card.danger { border-left-color: var(--danger); }
 .card.danger .num { color: var(--danger); }
+.card.ok { border-left-color: var(--ok); }
 .card.ok .num { color: var(--ok); }
+.card.warn { border-left-color: var(--warn); }
 .card.warn .num { color: var(--warn); }
+.card.radius-c { border-left-color: var(--radius-c); }
+.card.radius-c .num { color: var(--radius-c); }
 
 .panel {
   background: var(--bg-panel);
@@ -207,6 +255,16 @@ td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .badge.warn { background: var(--warn-dim); color: var(--warn); }
 .badge.info { background: var(--accent-dim); color: var(--accent); }
 .badge.err { background: var(--danger-dim); color: var(--danger); }
+.badge.radius-ok { background: var(--radius-c-dim); color: var(--radius-c); }
+.badge.radius-bad { background: var(--danger-dim); color: var(--danger); }
+
+.log-row { border-left: 4px solid transparent; }
+.log-row.type-ban { border-left-color: var(--danger); }
+.log-row.type-unban, .log-row.type-whitelist { border-left-color: var(--ok); }
+.log-row.type-failed-login, .log-row.type-login-attempt { border-left-color: var(--warn); }
+.log-row.type-auth-accept, .log-row.type-auth-reject { border-left-color: var(--radius-c); }
+.msg-ru { font-weight: 600; margin-bottom: 2px; }
+.msg-raw { color: var(--text-dim); font-size: 11.5px; }
 
 .pager { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-dim); }
 .pager button {
@@ -267,6 +325,12 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   <div class="sources-list" id="sourcesList"></div>
 </header>
 
+<div class="info-banner restore-banner" id="restoreAccessBanner">
+  📁 Найдены папки, выбранные в прошлый раз — <span id="restoreAccessHint"></span>.
+  <button class="small-btn primary" id="restoreAccessBtn" type="button">Восстановить доступ</button>
+  <button class="small-btn" id="restoreAccessDismissBtn" type="button">Не сейчас</button>
+</div>
+
 <div class="info-banner" id="infoBanner">
   Автоматическая загрузка через <code>fetch()</code> не сработала (это нормально, если страница открыта как
   локальный файл — <code>file://</code> — как на скриншотах IPBan под Windows: браузер такие запросы блокирует).
@@ -291,11 +355,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 </div>
 
 <nav>
-  <button class="tab-btn active" data-tab="overview">Обзор</button>
-  <button class="tab-btn" data-tab="logs">Логи</button>
-  <button class="tab-btn" data-tab="explorer">IP-адреса</button>
-  <button class="tab-btn" data-tab="users">Пользователи</button>
-  <button class="tab-btn" data-tab="dbtables">Таблицы БД</button>
+  <button class="tab-btn active" data-tab="overview">📊 Обзор</button>
+  <button class="tab-btn" data-tab="logs">📝 Логи</button>
+  <button class="tab-btn" data-tab="explorer">🌐 IP-адреса</button>
+  <button class="tab-btn" data-tab="users">👤 Пользователи</button>
+  <button class="tab-btn" data-tab="dbtables">🗄 Таблицы БД</button>
 </nav>
 
 <main>
@@ -337,11 +401,12 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <span class="hint">—</span>
       <input type="datetime-local" id="logDateTo">
     </span>
+    <label class="chk"><input type="checkbox" id="hideNoise" checked> скрыть служебные строки</label>
     <span class="hint" id="logCountHint"></span>
   </div>
   <div class="table-wrap">
     <table id="logsTable">
-      <thead><tr><th data-k="time">Время</th><th data-k="level">Уровень</th><th data-k="type">Тип</th><th data-k="ips">IP</th><th data-k="message">Сообщение</th></tr></thead>
+      <thead><tr><th data-k="time">Время</th><th data-k="level">Уровень</th><th data-k="type">Тип</th><th data-k="ips">IP / кто</th><th data-k="message">Что произошло</th></tr></thead>
       <tbody id="logsTbody"><tr><td colspan="5" class="empty">Лог ещё не загружен. Дашборд пытается подтянуть его автоматически — если не получилось, см. подсказку вверху страницы.</td></tr></tbody>
     </table>
   </div>
@@ -431,6 +496,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     logsSort: { key: "time", dir: 1 },
     ipSort: { key: "failedCount", dir: -1 },
     userSort: { key: "failCount", dir: -1 },
+    dayPickerManual: false, // true once the user explicitly picks a day, so adding/rescanning sources won't yank them away from it
     // Multiple independent folders (e.g. IPBan's own logs+db, plus a
     // RadiusProxy/RDP logs folder) can be added and are all merged together.
     // Each source: { id, label, dirHandle (nullable), logFileEntries: [...] }
@@ -520,6 +586,51 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const bs = u.lastIndexOf("\\");
     if (bs !== -1) u = u.slice(bs + 1);
     return u || null;
+  }
+
+  // Translates the reason code from "2 factor processed unsuccessfully ...
+  // Code: X" into a short Russian explanation. Unknown codes fall back to
+  // showing the raw code rather than guessing.
+  const TWO_FACTOR_REASON_RU = {
+    timeout: "истекло время ожидания — пользователь не отреагировал на уведомление",
+    reject: "пользователь отклонил запрос на подтверждение",
+    denied: "пользователь отклонил запрос на подтверждение",
+    error: "ошибка сервиса подтверждения",
+    expired: "истёк срок действия запроса на подтверждение",
+  };
+
+  // Turns a known RadiusProxy/IPBan message shape into a short, readable
+  // Russian summary. Returns null (show the raw message as-is) when nothing
+  // matches — this only covers patterns confirmed against real log samples,
+  // it does not guess at message shapes that haven't actually been seen.
+  function humanizeMessage(message, username) {
+    const who = username ? ` (${username})` : "";
+    let m;
+
+    if (/^Unban\s+/i.test(message)) return `Снят бан с IP`;
+    if (/added to whitelist/i.test(message)) return `IP добавлен в белый список`;
+    if ((m = message.match(/banning IP\s+[\d.:a-fA-F]+\s+for\s+(\d+)\s*day/i)))
+      return `IP забанен на ${m[1]} дн. за превышение лимита попыток входа`;
+    if (/has \d+ failed login attempts/i.test(message)) {
+      const cnt = message.match(/has (\d+) failed login attempts/i);
+      return `Зафиксированы неудачные попытки входа${cnt ? ` (${cnt[1]})` : ""}`;
+    }
+
+    if (/authentications?\s+success/i.test(message)) return `Успешный вход${who}`;
+    if (/authentications?\s+failed/i.test(message)) return `Отказано во входе${who}`;
+    if (/access-?accept/i.test(message)) return `RADIUS: доступ разрешён${who}`;
+    if (/access-?reject/i.test(message)) return `RADIUS: доступ запрещён${who}`;
+    if ((m = message.match(/2 factor processed unsuccessfully.*?Code:\s*(\w+)/i))) {
+      const reason = TWO_FACTOR_REASON_RU[m[1].toLowerCase()];
+      return `Не пройдена двухфакторная проверка${who}${reason ? ` — ${reason}` : ` (код: ${m[1]})`}`;
+    }
+    if (/2 factor processed successfully/i.test(message)) return `Пройдена двухфакторная проверка${who}`;
+    if (/Received AccessRequest/i.test(message)) return `Получен новый запрос на вход (RADIUS)`;
+    if (/Access allowed because AuthorizationStrategy/i.test(message)) return `Доступ разрешён политикой авторизации`;
+    if (/RadiusProxy Service started|Server started|Starting Radius server/i.test(message)) return `Служба RadiusProxy запущена`;
+    if (/Application started/i.test(message)) return `Приложение запущено`;
+
+    return null;
   }
 
   function parseTimeToMs(str) {
@@ -659,6 +770,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       e.type = classifyType(e.message);
       e.ips = extractIps(e.raw);
       e.username = extractUsername(e.message);
+      e.humanized = humanizeMessage(e.message, e.username);
+      e.noise = e.type === "info";
     });
 
     return entries;
@@ -693,6 +806,20 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
+  // Some rotated logs encode their date right in the filename (e.g.
+  // "log-2026-07-08-1"), which is more reliable than file mtime — a copy,
+  // backup, or sync can change mtime without changing what day the log is
+  // actually for. Falls back to mtime when the name has no date in it.
+  function dateOfLogEntry(name, lastModified) {
+    const m = name.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const [, y, mo, d] = m;
+      const asDate = new Date(`${y}-${mo}-${d}T12:00:00`);
+      if (!isNaN(asDate.getTime())) return `${y}-${mo}-${d}`;
+    }
+    return localDateStr(lastModified);
+  }
+
   async function parseLogFiles(files) {
     const sorted = files.slice().sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
     let all = [];
@@ -722,7 +849,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       return { e, isLog };
     }));
     const logEntries = checked.filter(c => c.isLog).map(c => c.e);
-    logEntries.forEach(e => { e.dateStr = localDateStr(e.lastModified); });
+    logEntries.forEach(e => { e.dateStr = dateOfLogEntry(e.name, e.lastModified); });
     logEntries.sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
 
     return { dbEntry, logEntries };
@@ -878,20 +1005,20 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     }
 
     const cards = [
-      { num: entries.length, lbl: "Строк лога разобрано", cls: "" },
-      { num: ips.length, lbl: "Уникальных IP", cls: "accent" },
-      { num: bannedCount, lbl: "Забанено (БД)", cls: "danger" },
-      { num: whitelistedCount, lbl: "В белом списке (БД)", cls: "ok" },
-      { num: failedEvents, lbl: "Событий неудачного входа", cls: "warn" },
-      { num: banEvents, lbl: "Событий бана (лог)", cls: "danger" },
+      { num: entries.length, lbl: "Строк лога разобрано", cls: "", icon: "📄" },
+      { num: ips.length, lbl: "Уникальных IP", cls: "accent", icon: "🌐" },
+      { num: bannedCount, lbl: "Забанено (БД)", cls: "danger", icon: "🚫" },
+      { num: whitelistedCount, lbl: "В белом списке (БД)", cls: "ok", icon: "✅" },
+      { num: failedEvents, lbl: "Событий неудачного входа", cls: "warn", icon: "⚠️" },
+      { num: banEvents, lbl: "Событий бана (лог)", cls: "danger", icon: "⛔" },
     ];
     if (radiusAccepts || radiusRejects || state.userMap.size) {
-      cards.push({ num: radiusAccepts, lbl: "RADIUS: успешных входов", cls: "ok" });
-      cards.push({ num: radiusRejects, lbl: "RADIUS: отказано", cls: "danger" });
+      cards.push({ num: radiusAccepts, lbl: "RADIUS: успешных входов", cls: "radius-c", icon: "🔐" });
+      cards.push({ num: radiusRejects, lbl: "RADIUS: отказано", cls: "radius-c", icon: "🔒" });
     }
     document.getElementById("overviewCards").innerHTML = cards.map(c =>
-      `<div class="card ${c.cls}"><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>`
-    ).join("") + `<div class="card"><div class="num" style="font-size:14px;">${dateRange}</div><div class="lbl">Диапазон времени лога</div></div>`;
+      `<div class="card ${c.cls}"><div class="icon">${c.icon}</div><div><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div></div>`
+    ).join("") + `<div class="card"><div class="icon">🕒</div><div><div class="num" style="font-size:14px;">${dateRange}</div><div class="lbl">Диапазон времени лога</div></div></div>`;
 
     const top = ips
       .map(r => ({ ip: r.ip, val: (r.failedCountDb != null ? Number(r.failedCountDb) : 0) + r.failedCountLog + (r.logCount * 0.01) }))
@@ -938,8 +1065,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       "auth-reject": "RADIUS: отказ", "auth-accept": "RADIUS: принято",
       info: "Инфо",
     };
-    const cls = type === "ban" || type === "auth-reject" ? "banned"
-      : type === "whitelist" || type === "auth-accept" ? "whitelisted"
+    const cls = type === "ban" ? "banned"
+      : type === "whitelist" ? "whitelisted"
+      : type === "auth-reject" ? "radius-bad"
+      : type === "auth-accept" ? "radius-ok"
       : type === "unban" ? "seen" : "info";
     return `<span class="badge ${cls}">${labels[type] || type}</span>`;
   }
@@ -965,14 +1094,16 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const q = document.getElementById("logSearch").value.trim().toLowerCase();
     const level = document.getElementById("logLevelFilter").value;
     const type = document.getElementById("logTypeFilter").value;
+    const hideNoise = document.getElementById("hideNoise").checked;
     const { from, to } = currentDateRange();
     return state.logEntries.filter(e => {
+      if (hideNoise && e.noise) return false;
       if (level && e.level !== level) return false;
       if (type && e.type !== type) return false;
       if (from != null && (e.timeMs == null || e.timeMs < from)) return false;
       if (to != null && (e.timeMs == null || e.timeMs > to)) return false;
       if (q) {
-        const hay = (e.message + " " + e.ips.join(" ")).toLowerCase();
+        const hay = (e.message + " " + e.ips.join(" ") + " " + (e.username || "") + " " + (e.humanized || "")).toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -1008,12 +1139,18 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       tbody.innerHTML = `<tr><td colspan="5" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
     } else {
       tbody.innerHTML = pageRows.map(e => `
-        <tr>
+        <tr class="log-row type-${e.type}">
           <td class="mono" style="white-space:nowrap;">${escapeHtml(e.time || "—")}</td>
           <td>${badgeForLevel(e.level)}</td>
           <td>${badgeForType(e.type)}</td>
-          <td class="mono">${e.ips.map(ip => `<span class="ip-link" data-ip="${escapeHtml(ip)}">${escapeHtml(ip)}</span>`).join(", ")}</td>
-          <td style="white-space:pre-wrap;">${escapeHtml(e.message)}</td>
+          <td class="mono">
+            ${e.ips.map(ip => `<span class="ip-link" data-ip="${escapeHtml(ip)}">${escapeHtml(ip)}</span>`).join(", ")}
+            ${e.username ? `<span class="ip-link" data-user="${escapeHtml(e.username)}">${escapeHtml(e.username)}</span>` : ""}
+          </td>
+          <td>
+            ${e.humanized ? `<div class="msg-ru">${escapeHtml(e.humanized)}</div>` : ""}
+            <div class="msg-raw" style="white-space:pre-wrap;">${escapeHtml(e.message)}</div>
+          </td>
         </tr>`).join("");
     }
 
@@ -1163,8 +1300,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     tbody.innerHTML = rows.map(r => `
       <tr class="user-row" data-user="${escapeHtml(r.username)}" style="cursor:pointer;">
         <td class="mono">${escapeHtml(r.username)}</td>
-        <td>${r.successCount ? `<span class="badge whitelisted">${r.successCount}</span>` : "0"}</td>
-        <td>${r.failCount ? `<span class="badge banned">${r.failCount}</span>` : "0"}</td>
+        <td>${r.successCount ? `<span class="badge radius-ok">${r.successCount}</span>` : "0"}</td>
+        <td>${r.failCount ? `<span class="badge radius-bad">${r.failCount}</span>` : "0"}</td>
         <td>${r.logCount || 0}</td>
         <td class="mono">${fmtTime(r.firstSeenMs)}</td>
         <td class="mono">${fmtTime(r.lastSeenMs)}</td>
@@ -1257,9 +1394,16 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const link = e.target.closest(".ip-link");
     if (!link) return;
     const ip = link.getAttribute("data-ip");
-    document.querySelector('.tab-btn[data-tab="explorer"]').click();
-    document.getElementById("ipSearch").value = ip;
-    renderIpExplorer();
+    const user = link.getAttribute("data-user");
+    if (user) {
+      document.querySelector('.tab-btn[data-tab="users"]').click();
+      document.getElementById("userSearch").value = user;
+      renderUsers();
+    } else if (ip) {
+      document.querySelector('.tab-btn[data-tab="explorer"]').click();
+      document.getElementById("ipSearch").value = ip;
+      renderIpExplorer();
+    }
   });
 
   document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -1271,7 +1415,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     });
   });
 
-  ["logSearch", "logLevelFilter", "logTypeFilter", "logDateFrom", "logDateTo"].forEach(id => {
+  ["logSearch", "logLevelFilter", "logTypeFilter", "logDateFrom", "logDateTo", "hideNoise"].forEach(id => {
     document.getElementById(id).addEventListener("input", () => { state.logsPage = 0; renderLogs(); });
   });
   document.getElementById("logDatePreset").addEventListener("change", (e) => {
@@ -1351,6 +1495,61 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // folders (e.g. IPBan's own logs+db, plus a separate RadiusProxy/RDP logs
   // folder) can be added at once and are all merged together.
   // -----------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Persisting folder handles: FileSystemDirectoryHandle can be stored in
+  // IndexedDB, so a folder picked once can be silently reattached on later
+  // visits instead of asking the user to browse for it again. Browsers still
+  // require a user gesture to actually re-grant read permission though — no
+  // page can silently read your disk with zero interaction ever, by design —
+  // so a revisit either restores instantly (permission remembered) or shows
+  // a single "reconnect" button instead of the full folder browser.
+  // -----------------------------------------------------------------------
+  const HANDLE_DB_NAME = "ipban-dashboard";
+  const HANDLE_STORE = "folderHandles";
+
+  function openHandleDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(HANDLE_DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(HANDLE_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveHandleToDb(key, handle) {
+    const db = await openHandleDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(HANDLE_STORE, "readwrite");
+      tx.objectStore(HANDLE_STORE).put(handle, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function loadHandlesFromDb() {
+    const db = await openHandleDb();
+    return new Promise((resolve, reject) => {
+      const items = [];
+      const req = db.transaction(HANDLE_STORE, "readonly").objectStore(HANDLE_STORE).openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) { items.push({ key: cursor.key, handle: cursor.value }); cursor.continue(); }
+        else resolve(items);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function removeHandleFromDb(key) {
+    const db = await openHandleDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(HANDLE_STORE, "readwrite");
+      tx.objectStore(HANDLE_STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   function allLogFileEntries() {
     return state.sources.flatMap(s => s.logFileEntries);
   }
@@ -1364,8 +1563,9 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         <button type="button" data-idx="${i}" title="Убрать эту папку">✕</button>
       </span>`).join("");
     box.querySelectorAll("button[data-idx]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        state.sources.splice(Number(btn.dataset.idx), 1);
+      btn.addEventListener("click", async () => {
+        const [removed] = state.sources.splice(Number(btn.dataset.idx), 1);
+        if (removed && removed.dbKey) { try { await removeHandleFromDb(removed.dbKey); } catch (e) { /* ignore */ } }
         afterSourcesChanged();
       });
     });
@@ -1380,8 +1580,14 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const picker = document.getElementById("logDayPicker");
     picker.min = dates[0];
     picker.max = dates[dates.length - 1];
-    if (!picker.value || picker.value < dates[0] || picker.value > dates[dates.length - 1]) {
-      picker.value = dates[dates.length - 1]; // default to the freshest day
+    const outOfRange = !picker.value || picker.value < dates[0] || picker.value > dates[dates.length - 1];
+    // Jump to the freshest day whenever the user hasn't explicitly chosen one
+    // themselves (initial load, or a new folder was just added) — but once
+    // they've picked a specific day, adding more folders shouldn't yank them
+    // away from it unless that day literally no longer has any data.
+    if (!state.dayPickerManual || outOfRange) {
+      picker.value = dates[dates.length - 1];
+      state.dayPickerManual = false;
     }
     document.getElementById("logDayHint").textContent =
       `доступно ${dates.length === 1 ? "1 дата" : dates.length + " дат"} (${dates[0]} — ${dates[dates.length - 1]}), файлов: ${all.length}`;
@@ -1480,8 +1686,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("pickFolderBtn").addEventListener("click", async () => {
     try {
       const handle = await window.showDirectoryPicker();
-      const source = { label: handle.name || `папка ${state.sources.length + 1}`, dirHandle: handle, logFileEntries: [], dbEntry: null };
+      const dbKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const source = { label: handle.name || `папка ${state.sources.length + 1}`, dirHandle: handle, logFileEntries: [], dbEntry: null, dbKey };
       state.sources.push(source);
+      try { await saveHandleToDb(dbKey, handle); } catch (e) { console.error("could not persist folder handle", e); }
       setAutoLoadStatus("сканирование папки...");
       await rescanSource(source);
       pickNewestDbEntry();
@@ -1492,6 +1700,69 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         setAutoLoadStatus("ошибка выбора папки: " + err.message);
       }
     }
+  });
+
+  // On later visits, try to silently reattach folders picked in a previous
+  // session. If the browser still trusts this handle, it just works with no
+  // prompt at all. If not, a single "Восстановить доступ" click (still a
+  // required user gesture, but no folder browsing) re-grants it.
+  async function restoreSavedFolders() {
+    let saved;
+    try { saved = await loadHandlesFromDb(); } catch (err) { return; }
+    if (!saved.length) return;
+
+    const pending = [];
+    for (const { key, handle } of saved) {
+      let perm = "denied";
+      try { perm = await handle.queryPermission({ mode: "read" }); } catch (err) { /* ignore */ }
+      if (perm === "granted") {
+        state.sources.push({ label: handle.name || "папка", dirHandle: handle, logFileEntries: [], dbEntry: null, dbKey: key });
+      } else {
+        pending.push({ key, handle });
+      }
+    }
+
+    if (state.sources.length) {
+      setAutoLoadStatus("восстановление ранее выбранных папок...");
+      await Promise.all(state.sources.map(s => rescanSource(s)));
+      pickNewestDbEntry();
+      await afterSourcesChanged();
+    }
+
+    if (pending.length) {
+      state.pendingRestoreHandles = pending;
+      document.getElementById("restoreAccessBanner").classList.add("show");
+      document.getElementById("restoreAccessHint").textContent =
+        `${pending.length === 1 ? "1 папка" : pending.length + " папки"} из прошлого раза (браузер требует подтвердить доступ заново)`;
+    }
+  }
+
+  document.getElementById("restoreAccessBtn").addEventListener("click", async () => {
+    const pending = state.pendingRestoreHandles || [];
+    document.getElementById("restoreAccessBanner").classList.remove("show");
+    for (const { key, handle } of pending) {
+      try {
+        const perm = await handle.requestPermission({ mode: "read" });
+        if (perm === "granted") {
+          state.sources.push({ label: handle.name || "папка", dirHandle: handle, logFileEntries: [], dbEntry: null, dbKey: key });
+        } else {
+          await removeHandleFromDb(key);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    state.pendingRestoreHandles = [];
+    if (state.sources.length) {
+      setAutoLoadStatus("сканирование папок...");
+      await Promise.all(state.sources.map(s => rescanSource(s)));
+      pickNewestDbEntry();
+      await afterSourcesChanged();
+    }
+  });
+
+  document.getElementById("restoreAccessDismissBtn").addEventListener("click", () => {
+    document.getElementById("restoreAccessBanner").classList.remove("show");
   });
 
   // Fallback for browsers without the File System Access API (e.g. older
@@ -1516,6 +1787,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
   document.getElementById("logDayPicker").addEventListener("change", () => {
     document.getElementById("logDayAll").checked = false;
+    state.dayPickerManual = true;
     reloadSelectedDay();
   });
   document.getElementById("logDayAll").addEventListener("change", reloadSelectedDay);
@@ -1606,7 +1878,15 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   });
 
   renderAll();
-  autoLoadAll();
+  (async () => {
+    if ("showDirectoryPicker" in window && window.indexedDB) {
+      await restoreSavedFolders();
+    }
+    // Only fall back to fetch()-by-fixed-name if no previously-picked folder
+    // could be restored, so the two loading strategies don't race/overwrite
+    // each other's data.
+    if (!isFolderModeActive()) await autoLoadAll();
+  })();
 })();
 </script>
 </body>
