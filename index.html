@@ -273,7 +273,8 @@ td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .log-row.type-failed-login, .log-row.type-login-attempt { border-left-color: var(--warn); }
 .log-row.type-auth-accept, .log-row.type-auth-reject { border-left-color: var(--radius-c); }
 .log-row.type-win-logon, .log-row.type-win-logoff, .log-row.type-win-reconnect,
-.log-row.type-win-disconnect, .log-row.type-win-shell { border-left-color: var(--win-c); }
+.log-row.type-win-disconnect, .log-row.type-win-shell,
+.log-row.type-win-rdp-auth { border-left-color: var(--win-c); }
 .log-row.type-win-failed { border-left-color: var(--danger); }
 .msg-ru { font-weight: 600; margin-bottom: 2px; }
 .msg-raw { color: var(--text-dim); font-size: 11.5px; }
@@ -415,6 +416,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <option value="win-failed">Windows: неудачный вход</option>
       <option value="win-reconnect">Windows: переподключение</option>
       <option value="win-disconnect">Windows: отключение</option>
+      <option value="win-rdp-auth">RDP: подключение</option>
       <option value="info">Прочее</option>
     </select>
     <select id="logDatePreset">
@@ -481,13 +483,14 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         <th data-k="username">Пользователь</th>
         <th data-k="successCount">2ФА: успешно</th>
         <th data-k="failCount">2ФА: отказ</th>
+        <th data-k="rdpConnects">RDP-подключений</th>
         <th data-k="winLogons">Входов Windows</th>
         <th data-k="winFailed">Неудачных Windows</th>
         <th data-k="sessionCount">Сессий</th>
         <th data-k="totalMs">Время работы</th>
         <th data-k="lastSeen">Последняя активность</th>
       </tr></thead>
-      <tbody id="userTbody"><tr><td colspan="8" class="empty">Добавьте папку с логами, чтобы увидеть список пользователей.</td></tr></tbody>
+      <tbody id="userTbody"><tr><td colspan="9" class="empty">Добавьте папку с логами, чтобы увидеть список пользователей.</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -802,7 +805,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       rec = {
         key, username, logCount: 0, successCount: 0, failCount: 0,
         firstSeenMs: null, lastSeenMs: null,
-        winLogons: 0, winFailed: 0, sessionCount: 0, totalMs: 0, sources: new Set(),
+        winLogons: 0, winFailed: 0, rdpConnects: 0, sessionCount: 0, totalMs: 0, sources: new Set(),
       };
       state.userMap.set(key, rec);
     }
@@ -894,6 +897,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     23: "RDP: выход из сессии",
     24: "RDP: сессия отключена",
     25: "RDP: сессия переподключена",
+    1149: "RDP: подключение установлено",
   };
 
   const LOGON_TYPE_RU = {
@@ -924,6 +928,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     4778: "win-reconnect", 25: "win-reconnect",
     4779: "win-disconnect", 24: "win-disconnect",
     22: "win-shell",
+    1149: "win-rdp-auth",
   };
 
   // Fallback for a raw `Get-WinEvent | Export-Csv` dump, which has no
@@ -1149,6 +1154,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         else if (e.type === "auth-reject") rec.failCount++;
         else if (e.type === "win-logon") rec.winLogons++;
         else if (e.type === "win-failed") rec.winFailed++;
+        else if (e.type === "win-rdp-auth") rec.rdpConnects++;
         rec.sources.add(isAuth ? "RadiusProxy (2FA)" : "Windows");
         if (e.timeMs != null) {
           if (rec.firstSeenMs == null || e.timeMs < rec.firstSeenMs) rec.firstSeenMs = e.timeMs;
@@ -1183,6 +1189,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
           startMs: e.timeMs, endMs: null,
           logonType: w.logonType, ip: w.ip, workstation: w.workstation,
           logonId: w.logonId, source: "Security 4624",
+          isRdp: w.logonType === 10,
         });
       } else if (e.type === "win-logoff" && w.logonId && open.has(w.logonId)) {
         const s = open.get(w.logonId);
@@ -1213,7 +1220,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
           username: e.username, key,
           startMs: e.timeMs, endMs: null,
           logonType: w.logonType, ip: w.ip, workstation: w.workstation,
-          logonId: null, source: "TerminalServices 21",
+          logonId: null, source: "TerminalServices",
+          // The TerminalServices session log only ever records RDP sessions,
+          // and its events carry no LogonType field — so the type must be
+          // taken from the log itself rather than from a (missing) column.
+          isRdp: true,
         });
       } else if (e.type === "win-logoff" && !w.logonId && tsOpen.has(tsKey)) {
         const s = tsOpen.get(tsKey);
@@ -1437,6 +1448,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       "win-logon": "Windows: вход", "win-logoff": "Windows: выход",
       "win-failed": "Windows: отказ", "win-reconnect": "Windows: переподключение",
       "win-disconnect": "Windows: отключение", "win-shell": "Windows: рабочий стол",
+      "win-rdp-auth": "RDP: подключение",
       info: "Инфо",
     };
     const cls = type === "ban" ? "banned"
@@ -1653,6 +1665,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         successCount: [a.successCount, b.successCount],
         failCount: [a.failCount, b.failCount],
         winLogons: [a.winLogons, b.winLogons],
+        rdpConnects: [a.rdpConnects, b.rdpConnects],
         winFailed: [a.winFailed, b.winFailed],
         sessionCount: [a.sessionCount, b.sessionCount],
         totalMs: [a.totalMs, b.totalMs],
@@ -1670,11 +1683,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
     const tbody = document.getElementById("userTbody");
     if (!state.userMap.size) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty">Добавьте папку с логами, чтобы увидеть список пользователей.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="empty">Добавьте папку с логами, чтобы увидеть список пользователей.</td></tr>`;
       return;
     }
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(r => `
@@ -1682,6 +1695,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         <td class="mono">${escapeHtml(r.username)}</td>
         <td>${r.successCount ? `<span class="badge radius-ok">${r.successCount}</span>` : "0"}</td>
         <td>${r.failCount ? `<span class="badge radius-bad">${r.failCount}</span>` : "0"}</td>
+        <td>${r.rdpConnects ? `<span class="badge win">${r.rdpConnects}</span>` : "0"}</td>
         <td>${r.winLogons ? `<span class="badge win">${r.winLogons}</span>` : "0"}</td>
         <td>${r.winFailed ? `<span class="badge banned">${r.winFailed}</span>` : "0"}</td>
         <td>${r.sessionCount || 0}</td>
@@ -1722,7 +1736,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
           <span class="badge win">${escapeHtml(fmtDuration(s.durationMs))}</span>
           <span class="mono">${fmtTime(s.startMs)}</span> → <span class="mono">${s.endMs != null ? fmtTime(s.endMs) : "ещё активна"}</span>
           ${s.ip ? ` · <span class="mono">${escapeHtml(s.ip)}</span>` : ""}
-          ${LOGON_TYPE_RU[s.logonType] ? ` · ${escapeHtml(LOGON_TYPE_RU[s.logonType])}` : ""}
+          ${s.isRdp ? " · RDP" : (LOGON_TYPE_RU[s.logonType] ? ` · ${escapeHtml(LOGON_TYPE_RU[s.logonType])}` : "")}
         </li>`).join("") + `</ul>`;
       if (rec && rec.totalMs) {
         html += `<div class="detail-total">Всего за выбранный период: <b>${escapeHtml(fmtDuration(rec.totalMs))}</b></div>`;
@@ -1741,7 +1755,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
     const detail = document.createElement("tr");
     detail.className = "detail-row";
-    detail.innerHTML = `<td colspan="8"><div class="detail-box rich">${html}</div></td>`;
+    detail.innerHTML = `<td colspan="9"><div class="detail-box rich">${html}</div></td>`;
     tr.after(detail);
   }
 
@@ -1753,7 +1767,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const onlyRdp = document.getElementById("sessionOnlyRdp").checked;
     return state.sessions.filter(s => {
       if (q && !s.username.toLowerCase().includes(q)) return false;
-      if (onlyRdp && s.logonType !== 10) return false;
+      if (onlyRdp && !s.isRdp) return false;
       return true;
     });
   }
@@ -1796,7 +1810,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         <td class="mono">${fmtTime(s.startMs)}</td>
         <td class="mono">${s.endMs != null ? fmtTime(s.endMs) : `<span class="badge win">ещё активна</span>`}</td>
         <td>${s.durationMs != null ? `<b>${escapeHtml(fmtDuration(s.durationMs))}</b>` : "—"}</td>
-        <td>${s.logonType === 10 ? `<span class="badge win">RDP</span>` : escapeHtml(LOGON_TYPE_RU[s.logonType] || "—")}</td>
+        <td>${s.isRdp ? `<span class="badge win">RDP</span>` : escapeHtml(LOGON_TYPE_RU[s.logonType] || "—")}</td>
         <td class="mono">${s.ip ? `<span class="ip-link" data-ip="${escapeHtml(s.ip)}">${escapeHtml(s.ip)}</span>` : "—"}</td>
         <td class="mono">${escapeHtml(s.workstation || "—")}</td>
       </tr>`).join("");
@@ -1810,7 +1824,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       const vals = [
         s.username, fmtTime(s.startMs), s.endMs != null ? fmtTime(s.endMs) : "ещё активна",
         fmtDuration(s.durationMs), s.durationMs != null ? Math.round(s.durationMs / 60000) : "",
-        LOGON_TYPE_RU[s.logonType] || "", s.ip || "", s.workstation || "",
+        s.isRdp ? "RDP" : (LOGON_TYPE_RU[s.logonType] || ""), s.ip || "", s.workstation || "",
       ];
       lines.push(vals.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
     });

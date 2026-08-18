@@ -60,7 +60,8 @@ param(
     [int]    $Days = 7,
     [switch] $Install,
     [int]    $IntervalMinutes = 15,
-    [switch] $Uninstall
+    [switch] $Uninstall,
+    [switch] $Diagnose
 )
 
 $ErrorActionPreference = "Stop"
@@ -151,10 +152,13 @@ function Add-Records {
         $f  = Get-EventFields -Event $ev
         $id = [int]$ev.Id
 
-        # Имя пользователя лежит в разных полях в зависимости от журнала
+        # Имя пользователя лежит в разных полях в зависимости от журнала.
+        # Событие 1149 (RemoteConnectionManager) кладёт значения без имён,
+        # позиционно: Param1 = пользователь, Param2 = домен, Param3 = адрес.
         $user = $f['TargetUserName']
         if (-not $user) { $user = $f['User'] }
         if (-not $user) { $user = $f['AccountName'] }
+        if (-not $user -and $id -eq 1149) { $user = $f['Param1'] }
 
         # События TerminalServices дают "ДОМЕН\пользователь" одной строкой
         $domain = $f['TargetDomainName']
@@ -164,9 +168,13 @@ function Add-Records {
             $user   = $parts[-1]
         }
 
+        $domainFromParam = if ($id -eq 1149) { $f['Param2'] } else { $null }
+        if (-not $domain -and $domainFromParam) { $domain = $domainFromParam }
+
         $ip = $f['IpAddress']
         if (-not $ip) { $ip = $f['Address'] }
         if (-not $ip) { $ip = $f['ClientAddress'] }
+        if (-not $ip -and $id -eq 1149) { $ip = $f['Param3'] }
         # Windows пишет "-" или "::1" когда адрес не применим
         if ($ip -eq '-' -or $ip -eq '::1' -or $ip -eq '127.0.0.1') { $ip = '' }
 
@@ -186,42 +194,94 @@ function Add-Records {
     }
 }
 
-# --- Журнал Security -------------------------------------------------------
-try {
-    $secEvents = Get-WinEvent -FilterHashtable @{
-        LogName   = 'Security'
-        Id        = 4624, 4625, 4634, 4647, 4778, 4779
-        StartTime = $startTime
-    } -ErrorAction Stop
-    Add-Records -Events $secEvents -SourceLog 'Security'
-    Write-Host "Security: получено $($secEvents.Count) событий" -ForegroundColor Gray
-} catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
-    Write-Warning "Журнал Security не найден."
-} catch {
-    if ($_.Exception.Message -match 'No events were found') {
-        Write-Host "Security: событий за период не найдено" -ForegroundColor Gray
-    } else {
-        Write-Warning "Не удалось прочитать журнал Security: $($_.Exception.Message)"
-        Write-Warning "Скорее всего не хватает прав — запустите PowerShell от имени администратора."
+# --------------------------------------------------------------------------
+# Какие журналы и события собираем
+# --------------------------------------------------------------------------
+# 1149 (RemoteConnectionManager) — самое надёжное свидетельство того, что
+# конкретный доменный пользователь подключился по RDP: оно пишется на каждое
+# успешное подключение и содержит логин и адрес источника. Журналы Security и
+# LocalSessionManager дают вход/выход и позволяют посчитать длительность.
+$LogSpecs = @(
+    @{ Log = 'Security';
+       Ids = 4624, 4625, 4634, 4647, 4778, 4779;
+       Label = 'Security';
+       Hint = 'Нужны права администратора и включённый аудит входа в систему.' },
+
+    @{ Log = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational';
+       Ids = 21, 23, 24, 25;
+       Label = 'TerminalServices (сессии)';
+       Hint = 'Появляется при установленной роли RDP / службе удалённых рабочих столов.' },
+
+    @{ Log = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational';
+       Ids = 1149;
+       Label = 'TerminalServices (подключения)';
+       Hint = 'Здесь видно каждое RDP-подключение доменных пользователей.' }
+)
+
+foreach ($spec in $LogSpecs) {
+    try {
+        $events = Get-WinEvent -FilterHashtable @{
+            LogName   = $spec.Log
+            Id        = $spec.Ids
+            StartTime = $startTime
+        } -ErrorAction Stop
+
+        Add-Records -Events $events -SourceLog $spec.Label
+        Write-Host ("{0}: получено {1} событий" -f $spec.Label, $events.Count) -ForegroundColor Gray
+    }
+    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
+        Write-Warning ("Журнал не найден: {0}" -f $spec.Log)
+        Write-Warning ("  {0}" -f $spec.Hint)
+    }
+    catch {
+        if ($_.Exception.Message -match 'No events were found|Не найдено событий') {
+            Write-Host ("{0}: событий за период не найдено" -f $spec.Label) -ForegroundColor Gray
+        } else {
+            Write-Warning ("Не удалось прочитать {0}: {1}" -f $spec.Log, $_.Exception.Message)
+            Write-Warning ("  {0}" -f $spec.Hint)
+        }
     }
 }
 
-# --- Журнал TerminalServices (RDP) ----------------------------------------
-try {
-    $tsEvents = Get-WinEvent -FilterHashtable @{
-        LogName   = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
-        Id        = 21, 23, 24, 25
-        StartTime = $startTime
-    } -ErrorAction Stop
-    Add-Records -Events $tsEvents -SourceLog 'TerminalServices'
-    Write-Host "TerminalServices: получено $($tsEvents.Count) событий" -ForegroundColor Gray
-} catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
-    Write-Warning "Журнал TerminalServices-LocalSessionManager не найден (возможно, роль RDP не установлена)."
-} catch {
-    if ($_.Exception.Message -match 'No events were found') {
-        Write-Host "TerminalServices: событий за период не найдено" -ForegroundColor Gray
-    } else {
-        Write-Warning "Не удалось прочитать журнал TerminalServices: $($_.Exception.Message)"
+# --------------------------------------------------------------------------
+# Диагностика: показать, что реально лежит в журналах
+# --------------------------------------------------------------------------
+# Если в дашборде видно меньше людей, чем ожидалось, причина почти всегда в
+# самих журналах (скрипт запущен не на том сервере, аудит выключен, или журнал
+# успел перезаписаться), а не в разборе. Этот режим показывает факты.
+if ($Diagnose) {
+    Write-Host ""
+    Write-Host "=== ДИАГНОСТИКА ===" -ForegroundColor Cyan
+    Write-Host ("Компьютер: {0}" -f $env:COMPUTERNAME)
+    Write-Host ("Период выгрузки: последние {0} дн. (с {1})" -f $Days, $startTime.ToString("yyyy-MM-dd HH:mm"))
+    Write-Host ""
+
+    foreach ($spec in $LogSpecs) {
+        Write-Host ("--- {0} [{1}]" -f $spec.Label, $spec.Log) -ForegroundColor Yellow
+        try {
+            $log = Get-WinEvent -ListLog $spec.Log -ErrorAction Stop
+            Write-Host ("  включён: {0}; записей всего: {1}; размер: {2:N0} из {3:N0} байт" -f `
+                $log.IsEnabled, $log.RecordCount, $log.FileSize, $log.MaximumSizeInBytes)
+
+            $oldest = Get-WinEvent -LogName $spec.Log -Oldest -MaxEvents 1 -ErrorAction Stop
+            Write-Host ("  самая старая запись в журнале: {0}" -f $oldest.TimeCreated)
+            if ($oldest.TimeCreated -gt $startTime) {
+                Write-Warning ("  Журнал не хранит все {0} дн. — он перезаписался. Более старых событий уже нет." -f $Days)
+            }
+        } catch {
+            Write-Warning ("  недоступен: {0}" -f $_.Exception.Message)
+            continue
+        }
+
+        try {
+            $ev = Get-WinEvent -FilterHashtable @{ LogName = $spec.Log; Id = $spec.Ids; StartTime = $startTime } -ErrorAction Stop
+            $ev | Group-Object Id | Sort-Object Name | ForEach-Object {
+                Write-Host ("  событие {0}: {1} шт." -f $_.Name, $_.Count)
+            }
+        } catch {
+            Write-Host "  событий за период нет"
+        }
+        Write-Host ""
     }
 }
 
@@ -241,5 +301,23 @@ $records |
     Sort-Object TimeCreated |
     Export-Csv -Path $outFile -NoTypeInformation -Encoding UTF8
 
+$distinctUsers = $records |
+    Where-Object { $_.User } |
+    Select-Object -ExpandProperty User -Unique |
+    Sort-Object
+
 Write-Host "Готово: $($records.Count) событий записано в $outFile" -ForegroundColor Green
+Write-Host ("Найдено пользователей: {0}" -f $distinctUsers.Count) -ForegroundColor Green
+if ($distinctUsers.Count -gt 0) {
+    Write-Host ("  {0}" -f ($distinctUsers -join ", ")) -ForegroundColor Gray
+}
+if ($distinctUsers.Count -le 2) {
+    Write-Host ""
+    Write-Warning "Пользователей найдено очень мало. Возможные причины:"
+    Write-Warning "  1. Скрипт запущен не на том сервере, где люди работают по RDP."
+    Write-Warning ("     Сейчас это: {0}" -f $env:COMPUTERNAME)
+    Write-Warning "  2. Журнал успел перезаписаться и хранит только последние часы."
+    Write-Warning "  3. Отключён аудит входа в систему."
+    Write-Warning "Запустите с ключом -Diagnose, чтобы увидеть, что реально в журналах."
+}
 Write-Host "Добавьте папку '$OutputDir' в дашборде кнопкой 'Добавить папку с логами'." -ForegroundColor Cyan
