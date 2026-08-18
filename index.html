@@ -22,6 +22,8 @@
   --ok-dim: #dcf3e6;
   --radius-c: #7c3aed;
   --radius-c-dim: #ede4fd;
+  --win-c: #0f7b9c;
+  --win-c-dim: #d8f0f8;
   --row-hover: #f0f4f9;
   --shadow: 0 1px 3px rgba(20,30,50,0.08);
   --header-grad: linear-gradient(100deg, #2f6feb 0%, #6d5bec 55%, #7c3aed 100%);
@@ -44,6 +46,8 @@
     --ok-dim: #163a29;
     --radius-c: #b795f7;
     --radius-c-dim: #2c2340;
+    --win-c: #5cc6e8;
+    --win-c-dim: #123641;
     --row-hover: #242a35;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
     --header-grad: linear-gradient(100deg, #1d3f8f 0%, #3d3096 55%, #4c2a8f 100%);
@@ -82,6 +86,7 @@ header h1 {
 header h1 span { color: rgba(255,255,255,0.75); font-weight: 400; font-size: 12px; }
 header .path-group,
 header .file-status,
+header .hint,
 header label.chk { color: rgba(255,255,255,0.85); }
 header .path-group input,
 header select {
@@ -200,6 +205,8 @@ main { padding: 18px 20px 40px 20px; max-width: 1400px; margin: 0 auto; }
 .card.warn .num { color: var(--warn); }
 .card.radius-c { border-left-color: var(--radius-c); }
 .card.radius-c .num { color: var(--radius-c); }
+.card.win-c { border-left-color: var(--win-c); }
+.card.win-c .num { color: var(--win-c); }
 
 .panel {
   background: var(--bg-panel);
@@ -257,12 +264,17 @@ td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .badge.err { background: var(--danger-dim); color: var(--danger); }
 .badge.radius-ok { background: var(--radius-c-dim); color: var(--radius-c); }
 .badge.radius-bad { background: var(--danger-dim); color: var(--danger); }
+.badge.win { background: var(--win-c-dim); color: var(--win-c); }
+.badge.src { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); font-weight: 500; }
 
 .log-row { border-left: 4px solid transparent; }
 .log-row.type-ban { border-left-color: var(--danger); }
 .log-row.type-unban, .log-row.type-whitelist { border-left-color: var(--ok); }
 .log-row.type-failed-login, .log-row.type-login-attempt { border-left-color: var(--warn); }
 .log-row.type-auth-accept, .log-row.type-auth-reject { border-left-color: var(--radius-c); }
+.log-row.type-win-logon, .log-row.type-win-logoff, .log-row.type-win-reconnect,
+.log-row.type-win-disconnect, .log-row.type-win-shell { border-left-color: var(--win-c); }
+.log-row.type-win-failed { border-left-color: var(--danger); }
 .msg-ru { font-weight: 600; margin-bottom: 2px; }
 .msg-raw { color: var(--text-dim); font-size: 11.5px; }
 
@@ -277,6 +289,15 @@ td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .empty b { color: var(--text); }
 
 .detail-row td { background: var(--bg); }
+.detail-box.rich { font-family: inherit; white-space: normal; max-height: 420px; }
+.detail-title { font-weight: 700; font-size: 12.5px; margin: 4px 0 6px; color: var(--text); }
+.detail-total { margin: 6px 0 2px; font-size: 12.5px; }
+.timeline { list-style: none; margin: 0 0 10px; padding: 0; }
+.timeline li {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 4px 8px; border-left: 2px solid var(--border); margin-bottom: 3px;
+  background: var(--bg-panel); border-radius: 0 6px 6px 0; font-size: 12.5px;
+}
 .detail-box { padding: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; background: var(--bg-elevated); border-radius: 6px; }
 
 .ip-link { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
@@ -335,7 +356,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   Автоматическая загрузка через <code>fetch()</code> не сработала (это нормально, если страница открыта как
   локальный файл — <code>file://</code> — как на скриншотах IPBan под Windows: браузер такие запросы блокирует).
   Нажмите <b>«➕ Добавить папку с логами»</b> вверху страницы и выберите папку целиком — можно нажать эту кнопку
-  несколько раз для разных папок (например, отдельно папку IPBan и отдельно папку RadiusProxy) — все они
+  несколько раз для разных папок (например, отдельно папку IPBan, отдельно папку RadiusProxy и отдельно папку
+  с выгрузкой журнала Windows, которую создаёт <code>export-windows-events.ps1</code>) — все они
   объединяются в одну картину. Дашборд сам найдёт в каждой папке файлы логов (какое бы имя они ни носили — файлы
   опознаются по содержимому, по первым строкам с датой, а не по конкретному имени) и файл <code>.sqlite</code>,
   объединит логи по их реальным меткам времени и покажет свежий день по умолчанию (другой день можно выбрать в
@@ -359,6 +381,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   <button class="tab-btn" data-tab="logs">📝 Логи</button>
   <button class="tab-btn" data-tab="explorer">🌐 IP-адреса</button>
   <button class="tab-btn" data-tab="users">👤 Пользователи</button>
+  <button class="tab-btn" data-tab="sessions">⏱ Сессии</button>
   <button class="tab-btn" data-tab="dbtables">🗄 Таблицы БД</button>
 </nav>
 
@@ -387,6 +410,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <option value="login-attempt">Попытка входа</option>
       <option value="auth-reject">RADIUS: отказ</option>
       <option value="auth-accept">RADIUS: принято</option>
+      <option value="win-logon">Windows: вход</option>
+      <option value="win-logoff">Windows: выход</option>
+      <option value="win-failed">Windows: неудачный вход</option>
+      <option value="win-reconnect">Windows: переподключение</option>
+      <option value="win-disconnect">Windows: отключение</option>
       <option value="info">Прочее</option>
     </select>
     <select id="logDatePreset">
@@ -444,21 +472,51 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     <span class="hint" id="userCountHint"></span>
   </div>
   <div class="hint" style="margin-bottom:10px;">
-    Из событий авторизации RadiusProxy (Authentications success/failed, AccessAccept/AccessReject) — IP здесь не
-    показывается, поскольку RadiusProxy видит только локальный адрес RADIUS-клиента, а не адрес реального
-    подключения.
+    Сводка по каждому пользователю из всех источников сразу: двухфакторка RadiusProxy, журнал Windows и логи
+    IPBan. Нажмите на строку, чтобы развернуть полную историю по человеку в хронологическом порядке.
   </div>
   <div class="table-wrap">
     <table id="userTable">
       <thead><tr>
         <th data-k="username">Пользователь</th>
-        <th data-k="successCount">Успешных входов</th>
-        <th data-k="failCount">Отказов</th>
-        <th data-k="logCount">Всего событий</th>
-        <th data-k="firstSeen">Первое появление</th>
-        <th data-k="lastSeen">Последнее появление</th>
+        <th data-k="successCount">2ФА: успешно</th>
+        <th data-k="failCount">2ФА: отказ</th>
+        <th data-k="winLogons">Входов Windows</th>
+        <th data-k="winFailed">Неудачных Windows</th>
+        <th data-k="sessionCount">Сессий</th>
+        <th data-k="totalMs">Время работы</th>
+        <th data-k="lastSeen">Последняя активность</th>
       </tr></thead>
-      <tbody id="userTbody"><tr><td colspan="6" class="empty">Добавьте папку с логом RadiusProxy, чтобы увидеть список пользователей.</td></tr></tbody>
+      <tbody id="userTbody"><tr><td colspan="8" class="empty">Добавьте папку с логами, чтобы увидеть список пользователей.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tab" id="tab-sessions">
+  <div class="toolbar">
+    <input type="text" id="sessionSearch" placeholder="Поиск по пользователю...">
+    <label class="chk"><input type="checkbox" id="sessionOnlyRdp"> только RDP</label>
+    <span class="hint" id="sessionCountHint"></span>
+    <button class="small-btn" id="exportSessionsBtn" style="margin-left:auto;">Экспорт CSV</button>
+  </div>
+  <div class="hint" style="margin-bottom:10px;">
+    Сессии собираются из журнала Windows: вход (событие 4624) связывается с выходом (4634/4647) по Logon ID —
+    поэтому длительность остаётся верной, даже если у человека открыто несколько сессий одновременно.
+    «Ещё активна» означает, что выход не найден: либо человек всё ещё в системе, либо событие выхода
+    не попало в выгруженный период.
+  </div>
+  <div class="table-wrap">
+    <table id="sessionTable">
+      <thead><tr>
+        <th data-k="username">Пользователь</th>
+        <th data-k="startMs">Подключился</th>
+        <th data-k="endMs">Отключился</th>
+        <th data-k="durationMs">Длительность</th>
+        <th data-k="logonType">Тип входа</th>
+        <th data-k="ip">Адрес источника</th>
+        <th data-k="workstation">Компьютер</th>
+      </tr></thead>
+      <tbody id="sessionTbody"><tr><td colspan="7" class="empty">Нет данных о сессиях. Добавьте папку с выгрузкой журнала Windows (см. export-windows-events.ps1).</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -488,7 +546,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   const state = {
     logEntries: [],       // {time, timeMs, level, type, ips:[...], username, message, raw}
     ipMap: new Map(),      // ip -> {ip, logCount, firstSeenMs, lastSeenMs, levels:{}, types:{}, failedCountLog, dbRow, dbTable, banned, whitelisted}
-    userMap: new Map(),    // username -> {username, logCount, successCount, failCount, firstSeenMs, lastSeenMs} — from RADIUS-style auth events
+    userMap: new Map(),    // normalized username -> per-user tallies across RADIUS + Windows
+    sessions: [],          // {username, startMs, endMs, durationMs, logonType, ip, workstation} — Windows logon sessions
     dbTables: {},          // name -> {columns:[...], rows:[...] , totalRows}
     ipTableName: null,
     logsPage: 0,
@@ -496,6 +555,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     logsSort: { key: "time", dir: 1 },
     ipSort: { key: "failedCount", dir: -1 },
     userSort: { key: "failCount", dir: -1 },
+    sessionSort: { key: "startMs", dir: -1 },
     dayPickerManual: false, // true once the user explicitly picks a day, so adding/rescanning sources won't yank them away from it
     // Multiple independent folders (e.g. IPBan's own logs+db, plus a
     // RadiusProxy/RDP logs folder) can be added and are all merged together.
@@ -728,11 +788,23 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return ip === "127.0.0.1" || ip === "::1" || /^0\.0\.0\.0$/.test(ip);
   }
 
+  // Sources spell the same person differently — RadiusProxy logs
+  // "FONTVIELLE\Ivanov", Windows logs "ivanov" — so the map is keyed on a
+  // normalized form while the first spelling seen is kept for display.
+  function normUser(username) {
+    return String(username || "").trim().toLowerCase();
+  }
+
   function getUserRec(username) {
-    let rec = state.userMap.get(username);
+    const key = normUser(username);
+    let rec = state.userMap.get(key);
     if (!rec) {
-      rec = { username, logCount: 0, successCount: 0, failCount: 0, firstSeenMs: null, lastSeenMs: null };
-      state.userMap.set(username, rec);
+      rec = {
+        key, username, logCount: 0, successCount: 0, failCount: 0,
+        firstSeenMs: null, lastSeenMs: null,
+        winLogons: 0, winFailed: 0, sessionCount: 0, totalMs: 0, sources: new Set(),
+      };
+      state.userMap.set(key, rec);
     }
     return rec;
   }
@@ -777,6 +849,187 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return entries;
   }
 
+  // ---------------------------------------------------------------------
+  // Windows Event Log support
+  // ---------------------------------------------------------------------
+  // A browser cannot read Windows' binary .evtx journals, so events arrive as
+  // a CSV produced by export-windows-events.ps1 (see the repo). Both that
+  // script's normalized columns and a raw `Get-WinEvent | Export-Csv` dump
+  // are accepted — the latter by digging the fields out of the Message text.
+
+  // RFC4180 CSV: handles quoted fields containing commas, escaped "" quotes,
+  // and embedded newlines (Windows event Message fields are multi-line).
+  function parseCsv(text) {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const rows = [];
+    let row = [], field = "", inQuotes = false, i = 0;
+    while (i < text.length) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      }
+      if (c === '"') { inQuotes = true; i++; continue; }
+      if (c === ",") { row.push(field); field = ""; i++; continue; }
+      if (c === "\r") { i++; continue; }
+      if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+      field += c; i++;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  const WIN_EVENT_RU = {
+    4624: "Вход в систему",
+    4625: "Неудачная попытка входа",
+    4634: "Выход из системы",
+    4647: "Выход из системы (инициирован пользователем)",
+    4778: "Сессия переподключена",
+    4779: "Сессия отключена",
+    21: "RDP: вход в сессию",
+    22: "RDP: запуск рабочего стола",
+    23: "RDP: выход из сессии",
+    24: "RDP: сессия отключена",
+    25: "RDP: сессия переподключена",
+  };
+
+  const LOGON_TYPE_RU = {
+    2: "локальный вход",
+    3: "сетевой доступ",
+    4: "пакетное задание",
+    5: "служба",
+    7: "разблокировка экрана",
+    8: "сетевой (открытый пароль)",
+    9: "новые учётные данные",
+    10: "RDP (удалённый рабочий стол)",
+    11: "кэшированный вход",
+  };
+
+  // Windows logs a flood of events for its own machine/service accounts
+  // (SYSTEM, DWM-1, UMFD-0, COMPUTER$ ...). They are not people and would
+  // swamp the per-user view, so they are dropped.
+  const SYSTEM_ACCOUNT_RE = /^(-|system|локальная система|local service|network service|anonymous logon|iusr|dwm-\d+|umfd-\d+|font driver host\S*|.+\$)$/i;
+
+  function isSystemAccount(user) {
+    return !user || SYSTEM_ACCOUNT_RE.test(String(user).trim());
+  }
+
+  const WIN_TYPE_BY_ID = {
+    4624: "win-logon", 21: "win-logon",
+    4634: "win-logoff", 4647: "win-logoff", 23: "win-logoff",
+    4625: "win-failed",
+    4778: "win-reconnect", 25: "win-reconnect",
+    4779: "win-disconnect", 24: "win-disconnect",
+    22: "win-shell",
+  };
+
+  // Fallback for a raw `Get-WinEvent | Export-Csv` dump, which has no
+  // dedicated columns — the interesting values only exist inside the
+  // human-readable Message blob. Both 4624 and 4625 mention an account twice
+  // (the "Subject" doing the logging, then the account actually logging in),
+  // and the one we want is always the later of the two.
+  function fieldsFromMessageText(msg) {
+    const lastMatch = (re) => {
+      let m, last = null;
+      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+      while ((m = g.exec(msg))) last = m;
+      return last;
+    };
+    const accName = lastMatch(/Account Name:\s*(\S+)/i);
+    const accDomain = lastMatch(/Account Domain:\s*(\S+)/i);
+    const logonId = lastMatch(/Logon ID:\s*(0x[0-9a-fA-F]+|\d+)/i);
+    const logonType = msg.match(/Logon Type:\s*(\d+)/i);
+    const srcIp = msg.match(/Source Network Address:\s*(\S+)/i);
+    const wks = msg.match(/Workstation Name:\s*(\S+)/i);
+    return {
+      User: accName ? accName[1] : "",
+      Domain: accDomain ? accDomain[1] : "",
+      LogonId: logonId ? logonId[1] : "",
+      LogonType: logonType ? logonType[1] : "",
+      IpAddress: srcIp ? srcIp[1] : "",
+      Workstation: wks ? wks[1] : "",
+    };
+  }
+
+  function parseWindowsEventCsv(text) {
+    const rows = parseCsv(text);
+    if (rows.length < 2) return [];
+    const headers = rows[0].map(h => h.trim().toLowerCase());
+    const at = (row, ...names) => {
+      for (const n of names) {
+        const i = headers.indexOf(n);
+        if (i !== -1 && row[i] != null && row[i] !== "") return String(row[i]).trim();
+      }
+      return "";
+    };
+
+    const entries = [];
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row.length || row.every(v => !v || !v.trim())) continue;
+
+      const id = parseInt(at(row, "eventid", "id"), 10);
+      const type = WIN_TYPE_BY_ID[id];
+      if (!type) continue; // an event we don't model — skip rather than guess
+
+      const timeStr = at(row, "timecreated", "timegenerated", "time");
+      const timeMs = parseTimeToMs(timeStr.replace(/\.\d+$/, ""));
+
+      // Prefer the explicit columns from export-windows-events.ps1; fall
+      // back to scraping the Message text of a raw Get-WinEvent export.
+      let user = at(row, "user", "targetusername", "accountname");
+      let domain = at(row, "domain", "targetdomainname");
+      let logonId = at(row, "logonid", "targetlogonid");
+      let logonType = at(row, "logontype");
+      let ip = at(row, "ipaddress", "address", "clientaddress");
+      let workstation = at(row, "workstation", "workstationname");
+      const sessionId = at(row, "sessionid");
+      const message = at(row, "message");
+
+      if (!user && message) {
+        const f = fieldsFromMessageText(message);
+        user = f.User; domain = domain || f.Domain; logonId = logonId || f.LogonId;
+        logonType = logonType || f.LogonType; ip = ip || f.IpAddress;
+        workstation = workstation || f.Workstation;
+      }
+
+      if (user && user.includes("\\")) {
+        const parts = user.split("\\");
+        domain = domain || parts[0];
+        user = parts[parts.length - 1];
+      }
+      if (ip === "-" || ip === "::1" || ip === "127.0.0.1") ip = "";
+      if (isSystemAccount(user)) continue;
+
+      const typeNum = parseInt(logonType, 10);
+      const typeRu = LOGON_TYPE_RU[typeNum];
+      const label = WIN_EVENT_RU[id] || `Событие ${id}`;
+      const detail = [
+        typeRu ? typeRu : null,
+        ip ? `с адреса ${ip}` : null,
+        workstation ? `компьютер ${workstation}` : null,
+      ].filter(Boolean).join(", ");
+
+      entries.push({
+        time: timeStr,
+        timeMs,
+        level: id === 4625 ? "Warning" : "Info",
+        type,
+        ips: ip ? [ip] : [],
+        username: user,
+        message: `Windows ${id}: ${label}${user ? ` — ${domain ? domain + "\\" : ""}${user}` : ""}${detail ? ` (${detail})` : ""}`,
+        humanized: `${label}${user ? ` (${user})` : ""}${detail ? ` — ${detail}` : ""}`,
+        raw: row.join(","),
+        noise: false,
+        win: { id, user, domain, logonId, logonType: typeNum, ip, workstation, sessionId },
+      });
+    }
+    return entries;
+  }
+
   // Log files are rotated under all sorts of names (logfile_900, ipban.log.3,
   // a plain date, etc.), so they're identified by content — does the file
   // start with lines matching IPBan's timestamp format — rather than by
@@ -789,15 +1042,24 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return /\.(sqlite3?|db)$/i.test(filename);
   }
 
-  async function looksLikeLogFile(file) {
-    if (SKIP_EXT_RE.test(file.name)) return false;
-    if (!file.size || file.size > 200 * 1024 * 1024) return false;
+  // Returns "windows-csv" | "text-log" | null, by looking at the content
+  // rather than the filename.
+  async function detectFileKind(file) {
+    if (SKIP_EXT_RE.test(file.name)) return null;
+    if (!file.size || file.size > 200 * 1024 * 1024) return null;
+    let sample;
     try {
-      const sample = await file.slice(0, 4096).text();
-      return TIMESTAMP_LINE_RE.test(sample);
+      sample = await file.slice(0, 8192).text();
     } catch (e) {
-      return false;
+      return null;
     }
+    const firstLine = (sample.split(/\r?\n/)[0] || "").toLowerCase();
+    const isCsvHeader = firstLine.includes(",") &&
+      /\btimecreated\b|\btimegenerated\b/.test(firstLine) &&
+      /\beventid\b|"id"|\bid\b|\brecordid\b|\blogname\b/.test(firstLine);
+    if (isCsvHeader) return "windows-csv";
+    if (TIMESTAMP_LINE_RE.test(sample)) return "text-log";
+    return null;
   }
 
   function localDateStr(ms) {
@@ -820,12 +1082,16 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return localDateStr(lastModified);
   }
 
+  // `files` may be plain Files or {file, kind} pairs; kind is resolved on the
+  // fly when absent so callers that only have Files still work.
   async function parseLogFiles(files) {
-    const sorted = files.slice().sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
+    const items = files.map(f => (f && f.file) ? f : { file: f, kind: null });
+    items.sort((a, b) => (a.file.lastModified || 0) - (b.file.lastModified || 0));
     let all = [];
-    for (const file of sorted) {
+    for (const { file, kind } of items) {
+      const resolved = kind || await detectFileKind(file);
       const text = await file.text();
-      const entries = parseLogText(text);
+      const entries = resolved === "windows-csv" ? parseWindowsEventCsv(text) : parseLogText(text);
       entries.forEach(e => { if (e.timeMs == null) e.timeMs = file.lastModified || null; });
       all = all.concat(entries);
     }
@@ -844,11 +1110,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
     const others = entries.filter(e => e !== dbEntry && !/\.(sqlite3?|db)(-wal|-shm)?$/i.test(e.name));
     const checked = await Promise.all(others.map(async e => {
-      let isLog = false;
-      try { isLog = await looksLikeLogFile(await e.getFile()); } catch (err) { isLog = false; }
-      return { e, isLog };
+      let kind = null;
+      try { kind = await detectFileKind(await e.getFile()); } catch (err) { kind = null; }
+      return { e, kind };
     }));
-    const logEntries = checked.filter(c => c.isLog).map(c => c.e);
+    const logEntries = checked.filter(c => c.kind).map(c => { c.e.kind = c.kind; return c.e; });
     logEntries.forEach(e => { e.dateStr = dateOfLogEntry(e.name, e.lastModified); });
     logEntries.sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
 
@@ -874,17 +1140,113 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
           if (rec.lastSeenMs == null || e.timeMs > rec.lastSeenMs) rec.lastSeenMs = e.timeMs;
         }
       });
-      if (e.username && (e.type === "auth-accept" || e.type === "auth-reject")) {
+      const isAuth = e.type === "auth-accept" || e.type === "auth-reject";
+      const isWinUser = !!e.win;
+      if (e.username && (isAuth || isWinUser)) {
         const rec = getUserRec(e.username);
         rec.logCount++;
-        if (e.type === "auth-accept") rec.successCount++; else rec.failCount++;
+        if (e.type === "auth-accept") rec.successCount++;
+        else if (e.type === "auth-reject") rec.failCount++;
+        else if (e.type === "win-logon") rec.winLogons++;
+        else if (e.type === "win-failed") rec.winFailed++;
+        rec.sources.add(isAuth ? "RadiusProxy (2FA)" : "Windows");
         if (e.timeMs != null) {
           if (rec.firstSeenMs == null || e.timeMs < rec.firstSeenMs) rec.firstSeenMs = e.timeMs;
           if (rec.lastSeenMs == null || e.timeMs > rec.lastSeenMs) rec.lastSeenMs = e.timeMs;
         }
       }
     });
+    buildSessions();
     applyDbToIpMap();
+  }
+
+  // ---------------------------------------------------------------------
+  // Windows logon sessions
+  // ---------------------------------------------------------------------
+  // A session is a 4624 (logon) paired with the 4634/4647 (logoff) that
+  // carries the same Logon ID. Pairing on the ID rather than on "next logoff
+  // for this user" is what makes the duration trustworthy when someone has
+  // several sessions open at once (very common with RDP).
+  function buildSessions() {
+    state.sessions = [];
+    const evs = state.logEntries.filter(e => e.win && e.username)
+      .slice().sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
+
+    const open = new Map();          // logonId -> session being built
+    const usersWithIdSessions = new Set();
+
+    for (const e of evs) {
+      const w = e.win;
+      if (e.type === "win-logon" && w.logonId) {
+        open.set(w.logonId, {
+          username: e.username, key: normUser(e.username),
+          startMs: e.timeMs, endMs: null,
+          logonType: w.logonType, ip: w.ip, workstation: w.workstation,
+          logonId: w.logonId, source: "Security 4624",
+        });
+      } else if (e.type === "win-logoff" && w.logonId && open.has(w.logonId)) {
+        const s = open.get(w.logonId);
+        s.endMs = e.timeMs;
+        open.delete(w.logonId);
+        state.sessions.push(s);
+        usersWithIdSessions.add(s.key);
+      }
+    }
+    // Logons with no matching logoff yet: still open, or the logoff simply
+    // falls outside the exported window. Either way we must not invent an end.
+    for (const s of open.values()) {
+      state.sessions.push(s);
+      usersWithIdSessions.add(s.key);
+    }
+
+    // Some hosts don't record 4624/4634 for RDP but do record the
+    // TerminalServices 21/23 pair. Only used for users who got no Logon-ID
+    // session at all, so the two schemes can't double-count the same login.
+    const tsOpen = new Map();
+    for (const e of evs) {
+      const w = e.win;
+      const key = normUser(e.username);
+      if (usersWithIdSessions.has(key)) continue;
+      const tsKey = `${key}|${w.sessionId || ""}`;
+      if (e.type === "win-logon" && !w.logonId) {
+        tsOpen.set(tsKey, {
+          username: e.username, key,
+          startMs: e.timeMs, endMs: null,
+          logonType: w.logonType, ip: w.ip, workstation: w.workstation,
+          logonId: null, source: "TerminalServices 21",
+        });
+      } else if (e.type === "win-logoff" && !w.logonId && tsOpen.has(tsKey)) {
+        const s = tsOpen.get(tsKey);
+        s.endMs = e.timeMs;
+        tsOpen.delete(tsKey);
+        state.sessions.push(s);
+      }
+    }
+    for (const s of tsOpen.values()) state.sessions.push(s);
+
+    state.sessions.forEach(s => {
+      s.durationMs = (s.endMs != null && s.startMs != null && s.endMs >= s.startMs)
+        ? s.endMs - s.startMs : null;
+    });
+    state.sessions.sort((a, b) => (b.startMs || 0) - (a.startMs || 0));
+
+    // Roll session totals up onto the per-user records.
+    state.sessions.forEach(s => {
+      const rec = state.userMap.get(s.key);
+      if (!rec) return;
+      rec.sessionCount++;
+      if (s.durationMs != null) rec.totalMs += s.durationMs;
+    });
+  }
+
+  function fmtDuration(ms) {
+    if (ms == null) return "—";
+    const totalMin = Math.round(ms / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h && m) return `${h} ч ${m} мин`;
+    if (h) return `${h} ч`;
+    return `${m} мин`;
   }
 
   // ---------------------------------------------------------------------
@@ -1012,9 +1374,18 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       { num: failedEvents, lbl: "Событий неудачного входа", cls: "warn", icon: "⚠️" },
       { num: banEvents, lbl: "Событий бана (лог)", cls: "danger", icon: "⛔" },
     ];
-    if (radiusAccepts || radiusRejects || state.userMap.size) {
-      cards.push({ num: radiusAccepts, lbl: "RADIUS: успешных входов", cls: "radius-c", icon: "🔐" });
-      cards.push({ num: radiusRejects, lbl: "RADIUS: отказано", cls: "radius-c", icon: "🔒" });
+    if (radiusAccepts || radiusRejects) {
+      cards.push({ num: radiusAccepts, lbl: "2ФА: успешных входов", cls: "radius-c", icon: "🔐" });
+      cards.push({ num: radiusRejects, lbl: "2ФА: отказано", cls: "radius-c", icon: "🔒" });
+    }
+    const winLogons = entries.filter(e => e.type === "win-logon").length;
+    const winFailed = entries.filter(e => e.type === "win-failed").length;
+    if (winLogons || winFailed || state.sessions.length) {
+      const totalWorkMs = state.sessions.reduce((sum, s) => sum + (s.durationMs || 0), 0);
+      cards.push({ num: winLogons, lbl: "Windows: входов в систему", cls: "win-c", icon: "🪟" });
+      if (winFailed) cards.push({ num: winFailed, lbl: "Windows: неудачных входов", cls: "danger", icon: "🛑" });
+      cards.push({ num: state.sessions.length, lbl: "Сессий за период", cls: "win-c", icon: "⏱" });
+      cards.push({ num: fmtDuration(totalWorkMs), lbl: "Суммарное время работы", cls: "win-c", icon: "🕓" });
     }
     document.getElementById("overviewCards").innerHTML = cards.map(c =>
       `<div class="card ${c.cls}"><div class="icon">${c.icon}</div><div><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div></div>`
@@ -1063,12 +1434,17 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       ban: "Бан", unban: "Разбан", whitelist: "Белый список",
       "failed-login": "Неудачный вход", "login-attempt": "Попытка входа",
       "auth-reject": "RADIUS: отказ", "auth-accept": "RADIUS: принято",
+      "win-logon": "Windows: вход", "win-logoff": "Windows: выход",
+      "win-failed": "Windows: отказ", "win-reconnect": "Windows: переподключение",
+      "win-disconnect": "Windows: отключение", "win-shell": "Windows: рабочий стол",
       info: "Инфо",
     };
     const cls = type === "ban" ? "banned"
       : type === "whitelist" ? "whitelisted"
       : type === "auth-reject" ? "radius-bad"
       : type === "auth-accept" ? "radius-ok"
+      : type === "win-failed" ? "banned"
+      : type && type.startsWith("win-") ? "win"
       : type === "unban" ? "seen" : "info";
     return `<span class="badge ${cls}">${labels[type] || type}</span>`;
   }
@@ -1263,7 +1639,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const onlyFailed = document.getElementById("userOnlyFailed").checked;
     return Array.from(state.userMap.values()).filter(r => {
       if (q && !r.username.toLowerCase().includes(q)) return false;
-      if (onlyFailed && !r.failCount) return false;
+      if (onlyFailed && !r.failCount && !r.winFailed) return false;
       return true;
     });
   }
@@ -1276,6 +1652,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         username: [a.username, b.username],
         successCount: [a.successCount, b.successCount],
         failCount: [a.failCount, b.failCount],
+        winLogons: [a.winLogons, b.winLogons],
+        winFailed: [a.winFailed, b.winFailed],
+        sessionCount: [a.sessionCount, b.sessionCount],
+        totalMs: [a.totalMs, b.totalMs],
         logCount: [a.logCount, b.logCount],
         firstSeen: [a.firstSeenMs || 0, b.firstSeenMs || 0],
         lastSeen: [a.lastSeenMs || 0, b.lastSeenMs || 0],
@@ -1290,20 +1670,22 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
     const tbody = document.getElementById("userTbody");
     if (!state.userMap.size) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">Добавьте папку с логом RadiusProxy, чтобы увидеть список пользователей.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty">Добавьте папку с логами, чтобы увидеть список пользователей.</td></tr>`;
       return;
     }
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(r => `
-      <tr class="user-row" data-user="${escapeHtml(r.username)}" style="cursor:pointer;">
+      <tr class="user-row" data-user="${escapeHtml(r.key)}" style="cursor:pointer;">
         <td class="mono">${escapeHtml(r.username)}</td>
         <td>${r.successCount ? `<span class="badge radius-ok">${r.successCount}</span>` : "0"}</td>
         <td>${r.failCount ? `<span class="badge radius-bad">${r.failCount}</span>` : "0"}</td>
-        <td>${r.logCount || 0}</td>
-        <td class="mono">${fmtTime(r.firstSeenMs)}</td>
+        <td>${r.winLogons ? `<span class="badge win">${r.winLogons}</span>` : "0"}</td>
+        <td>${r.winFailed ? `<span class="badge banned">${r.winFailed}</span>` : "0"}</td>
+        <td>${r.sessionCount || 0}</td>
+        <td>${r.totalMs ? `<b>${escapeHtml(fmtDuration(r.totalMs))}</b>` : "—"}</td>
         <td class="mono">${fmtTime(r.lastSeenMs)}</td>
       </tr>`).join("");
 
@@ -1312,19 +1694,133 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     });
   }
 
+  // The point of the whole dashboard: one person's activity from every
+  // source, in time order — 2FA prompts, Windows logons/logoffs, IPBan
+  // reactions — plus their session list, so "when did they connect, when did
+  // they leave, how long did they work" is answerable at a glance.
   function toggleUserDetail(tr) {
     const next = tr.nextElementSibling;
     if (next && next.classList.contains("detail-row")) { next.remove(); return; }
     document.querySelectorAll(".detail-row").forEach(el => el.remove());
-    const username = tr.getAttribute("data-user");
-    const matches = state.logEntries.filter(e => e.username === username && (e.type === "auth-accept" || e.type === "auth-reject"));
+    const key = tr.getAttribute("data-user");
+
+    const matches = state.logEntries
+      .filter(e => normUser(e.username) === key)
+      .slice().sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
+
+    const sessions = state.sessions.filter(s => s.key === key);
+    const rec = state.userMap.get(key);
+
+    const sourceOf = (e) => e.win ? "Windows"
+      : (e.type === "auth-accept" || e.type === "auth-reject") ? "2ФА"
+      : "IPBan";
+
+    let html = "";
+    if (sessions.length) {
+      html += `<div class="detail-title">Сессии (${sessions.length})</div><ul class="timeline">` +
+        sessions.map(s => `<li>
+          <span class="badge win">${escapeHtml(fmtDuration(s.durationMs))}</span>
+          <span class="mono">${fmtTime(s.startMs)}</span> → <span class="mono">${s.endMs != null ? fmtTime(s.endMs) : "ещё активна"}</span>
+          ${s.ip ? ` · <span class="mono">${escapeHtml(s.ip)}</span>` : ""}
+          ${LOGON_TYPE_RU[s.logonType] ? ` · ${escapeHtml(LOGON_TYPE_RU[s.logonType])}` : ""}
+        </li>`).join("") + `</ul>`;
+      if (rec && rec.totalMs) {
+        html += `<div class="detail-total">Всего за выбранный период: <b>${escapeHtml(fmtDuration(rec.totalMs))}</b></div>`;
+      }
+    }
+
+    html += `<div class="detail-title">История событий (${matches.length})</div>`;
+    html += matches.length
+      ? `<ul class="timeline">` + matches.map(e => `<li>
+            <span class="badge src">${escapeHtml(sourceOf(e))}</span>
+            <span class="mono">${escapeHtml(e.time || "?")}</span>
+            ${badgeForType(e.type)}
+            ${escapeHtml(e.humanized || e.message)}
+          </li>`).join("") + `</ul>`
+      : `<div class="hint">Событий по этому пользователю не найдено.</div>`;
+
     const detail = document.createElement("tr");
     detail.className = "detail-row";
-    const body = matches.length
-      ? matches.map(e => `[${e.time || "?"}] (${e.type === "auth-accept" ? "успех" : "отказ"}) ${e.message}`).join("\n\n")
-      : "Нет связанных событий авторизации для этого пользователя.";
-    detail.innerHTML = `<td colspan="6"><div class="detail-box">${escapeHtml(body)}</div></td>`;
+    detail.innerHTML = `<td colspan="8"><div class="detail-box rich">${html}</div></td>`;
     tr.after(detail);
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering: Sessions tab
+  // ---------------------------------------------------------------------
+  function filteredSessions() {
+    const q = document.getElementById("sessionSearch").value.trim().toLowerCase();
+    const onlyRdp = document.getElementById("sessionOnlyRdp").checked;
+    return state.sessions.filter(s => {
+      if (q && !s.username.toLowerCase().includes(q)) return false;
+      if (onlyRdp && s.logonType !== 10) return false;
+      return true;
+    });
+  }
+
+  function renderSessions() {
+    let rows = filteredSessions();
+    const { key, dir } = state.sessionSort;
+    rows = rows.slice().sort((a, b) => {
+      const map = {
+        username: [a.username, b.username],
+        startMs: [a.startMs || 0, b.startMs || 0],
+        endMs: [a.endMs || 0, b.endMs || 0],
+        durationMs: [a.durationMs || 0, b.durationMs || 0],
+        logonType: [a.logonType || 0, b.logonType || 0],
+        ip: [a.ip || "", b.ip || ""],
+        workstation: [a.workstation || "", b.workstation || ""],
+      };
+      const [av, bv] = map[key] || [0, 0];
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+
+    const totalMs = rows.reduce((sum, s) => sum + (s.durationMs || 0), 0);
+    document.getElementById("sessionCountHint").textContent = rows.length
+      ? `${rows.length} сессий, суммарно ${fmtDuration(totalMs)}` : "";
+
+    const tbody = document.getElementById("sessionTbody");
+    if (!state.sessions.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Нет данных о сессиях. Добавьте папку с выгрузкой журнала Windows (см. export-windows-events.ps1).</td></tr>`;
+      return;
+    }
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(s => `
+      <tr>
+        <td class="mono"><span class="ip-link" data-user="${escapeHtml(s.username)}">${escapeHtml(s.username)}</span></td>
+        <td class="mono">${fmtTime(s.startMs)}</td>
+        <td class="mono">${s.endMs != null ? fmtTime(s.endMs) : `<span class="badge win">ещё активна</span>`}</td>
+        <td>${s.durationMs != null ? `<b>${escapeHtml(fmtDuration(s.durationMs))}</b>` : "—"}</td>
+        <td>${s.logonType === 10 ? `<span class="badge win">RDP</span>` : escapeHtml(LOGON_TYPE_RU[s.logonType] || "—")}</td>
+        <td class="mono">${s.ip ? `<span class="ip-link" data-ip="${escapeHtml(s.ip)}">${escapeHtml(s.ip)}</span>` : "—"}</td>
+        <td class="mono">${escapeHtml(s.workstation || "—")}</td>
+      </tr>`).join("");
+  }
+
+  function exportSessionsCsv() {
+    const rows = filteredSessions();
+    const header = ["Пользователь", "Подключился", "Отключился", "Длительность", "Минут", "Тип входа", "Адрес", "Компьютер"];
+    const lines = [header.join(",")];
+    rows.forEach(s => {
+      const vals = [
+        s.username, fmtTime(s.startMs), s.endMs != null ? fmtTime(s.endMs) : "ещё активна",
+        fmtDuration(s.durationMs), s.durationMs != null ? Math.round(s.durationMs / 60000) : "",
+        LOGON_TYPE_RU[s.logonType] || "", s.ip || "", s.workstation || "",
+      ];
+      lines.push(vals.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    });
+    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ipban-sessions.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function exportCsv() {
@@ -1386,6 +1882,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     renderLogs();
     renderIpExplorer();
     renderUsers();
+    renderSessions();
     populateDbTableSelect();
     renderRawDbTable();
   }
@@ -1442,6 +1939,17 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     });
   });
   document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+  document.getElementById("exportSessionsBtn").addEventListener("click", exportSessionsCsv);
+  ["sessionSearch", "sessionOnlyRdp"].forEach(id => {
+    document.getElementById(id).addEventListener("input", renderSessions);
+  });
+  document.querySelectorAll("#sessionTable th").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.k;
+      if (state.sessionSort.key === k) state.sessionSort.dir *= -1; else { state.sessionSort.key = k; state.sessionSort.dir = -1; }
+      renderSessions();
+    });
+  });
   document.getElementById("dbTableSelect").addEventListener("change", renderRawDbTable);
 
   ["userSearch", "userOnlyFailed"].forEach(id => {
@@ -1602,7 +2110,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     const parts = [];
     if (all.length) {
       if (chosen.length) {
-        const files = await Promise.all(chosen.map(e => e.getFile()));
+        const files = await Promise.all(chosen.map(async e => ({ file: await e.getFile(), kind: e.kind })));
         state.logEntries = await parseLogFiles(files);
         parts.push(`лог: ${chosen.length} файл(ов)${(!showAll && day) ? " за " + day : ""} из ${state.sources.length} источник(ов), ${state.logEntries.length} строк`);
       } else {
