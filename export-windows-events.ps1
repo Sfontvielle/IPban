@@ -120,11 +120,23 @@ if ($Uninstall) {
 
 if ($Install) {
     $scriptPath = $MyInvocation.MyCommand.Path
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -OutputDir `"$OutputDir`" -Days $Days"
+    $argLine = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -OutputDir `"$OutputDir`" -Days $Days"
+    if ($ComputerName) {
+        $quoted = ($ComputerName | ForEach-Object { "`"$_`"" }) -join ", "
+        $argLine += " -ComputerName $quoted"
+    }
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argLine
 
     $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
         -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
+
+    if ($ComputerName) {
+        Write-Warning "Задача будет собирать события с удалённых компьютеров, но по умолчанию выполняется от имени SYSTEM,"
+        Write-Warning "у которого обычно нет прав читать журналы на других машинах."
+        Write-Warning "После создания откройте Планировщик заданий -> найдите задачу '$TaskName' -> Свойства -> вкладка"
+        Write-Warning "'Общие' -> смените учётную запись на доменную с правами на удалённых компьютерах (например,"
+        Write-Warning "член группы 'Читатели журнала событий' на каждой машине или доменный администратор)."
+    }
 
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     $settings  = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopOnIdleEnd
