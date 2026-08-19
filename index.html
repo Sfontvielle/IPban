@@ -506,7 +506,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     Сессии собираются из журнала Windows: вход (событие 4624) связывается с выходом (4634/4647) по Logon ID —
     поэтому длительность остаётся верной, даже если у человека открыто несколько сессий одновременно.
     «Ещё активна» означает, что выход не найден: либо человек всё ещё в системе, либо событие выхода
-    не попало в выгруженный период.
+    не попало в выгруженный период. Показаны только сессии, за которыми сидит человек (вход локально,
+    по RDP, разблокировка экрана). Служебные и сетевые входы (обращения к общим папкам, групповые
+    политики, службы) сессиями не считаются — их тысячи, и выхода у них не бывает; они остаются
+    видны на вкладке «Логи».
   </div>
   <div class="table-wrap">
     <table id="sessionTable">
@@ -522,6 +525,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <tbody id="sessionTbody"><tr><td colspan="7" class="empty">Нет данных о сессиях. Добавьте папку с выгрузкой журнала Windows (см. export-windows-events.ps1).</td></tr></tbody>
     </table>
   </div>
+  <div class="pager" id="sessionsPager" style="margin-top:10px;"></div>
 </div>
 
 <div class="tab" id="tab-dbtables">
@@ -559,6 +563,8 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     ipSort: { key: "failedCount", dir: -1 },
     userSort: { key: "failCount", dir: -1 },
     sessionSort: { key: "startMs", dir: -1 },
+    sessionsPage: 0,
+    sessionsPageSize: 100,
     dayPickerManual: false, // true once the user explicitly picks a day, so adding/rescanning sources won't yank them away from it
     // Multiple independent folders (e.g. IPBan's own logs+db, plus a
     // RadiusProxy/RDP logs folder) can be added and are all merged together.
@@ -788,7 +794,11 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // machine) — it's never a meaningful "who's attacking" IP, so it's kept
   // out of the IP map to avoid drowning out real addresses from IPBan.
   function isNoiseIp(ip) {
-    return ip === "127.0.0.1" || ip === "::1" || /^0\.0\.0\.0$/.test(ip);
+    if (!ip) return true;
+    if (ip === "127.0.0.1" || ip === "::1" || ip === "0.0.0.0" || ip === "-") return true;
+    // fe80::/10 (IPv6) and 169.254.0.0/16 (IPv4) are link-local: the adapter
+    // talking on its own segment, not an address anyone connected *from*.
+    return /^fe80:/i.test(ip) || /^169\.254\./.test(ip);
   }
 
   // Sources spell the same person differently — RadiusProxy logs
@@ -915,7 +925,10 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // Windows logs a flood of events for its own machine/service accounts
   // (SYSTEM, DWM-1, UMFD-0, COMPUTER$ ...). They are not people and would
   // swamp the per-user view, so they are dropped.
-  const SYSTEM_ACCOUNT_RE = /^(-|system|локальная система|local service|network service|anonymous logon|iusr|dwm-\d+|umfd-\d+|font driver host\S*|.+\$)$/i;
+  const SYSTEM_ACCOUNT_RE = new RegExp(
+    "^(-|system|система|локальная система|local service|локальная служба|" +
+    "network service|сетевая служба|anonymous logon|анонимный вход|" +
+    "iusr|dwm-\\d+|umfd-\\d+|font driver host\\S*|.+\\$)$", "i");
 
   function isSystemAccount(user) {
     return !user || SYSTEM_ACCOUNT_RE.test(String(user).trim());
@@ -1173,6 +1186,13 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   // carries the same Logon ID. Pairing on the ID rather than on "next logoff
   // for this user" is what makes the duration trustworthy when someone has
   // several sessions open at once (very common with RDP).
+  // Only these logon types are a person actually sitting in a session.
+  // Type 3 (network) in particular fires constantly for file shares, group
+  // policy and service-to-service auth — tens of thousands of them on a
+  // domain server — and never produces a matching logoff, so treating them
+  // as sessions buried the real ones under permanent "ещё активна" rows.
+  const INTERACTIVE_LOGON_TYPES = new Set([2, 7, 10, 11]);
+
   function buildSessions() {
     state.sessions = [];
     const evs = state.logEntries.filter(e => e.win && e.username)
@@ -1183,6 +1203,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
 
     for (const e of evs) {
       const w = e.win;
+      if (e.type === "win-logon" && w.logonId && !INTERACTIVE_LOGON_TYPES.has(w.logonType)) continue;
       if (e.type === "win-logon" && w.logonId) {
         open.set(w.logonId, {
           username: e.username, key: normUser(e.username),
@@ -1792,19 +1813,42 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     });
 
     const totalMs = rows.reduce((sum, s) => sum + (s.durationMs || 0), 0);
-    document.getElementById("sessionCountHint").textContent = rows.length
-      ? `${rows.length} сессий, суммарно ${fmtDuration(totalMs)}` : "";
 
     const tbody = document.getElementById("sessionTbody");
+    const pager = document.getElementById("sessionsPager");
     if (!state.sessions.length) {
+      document.getElementById("sessionCountHint").textContent = "";
       tbody.innerHTML = `<tr><td colspan="7" class="empty">Нет данных о сессиях. Добавьте папку с выгрузкой журнала Windows (см. export-windows-events.ps1).</td></tr>`;
+      pager.innerHTML = "";
       return;
     }
     if (!rows.length) {
+      document.getElementById("sessionCountHint").textContent = "";
       tbody.innerHTML = `<tr><td colspan="7" class="empty">Ничего не найдено по заданным фильтрам.</td></tr>`;
+      pager.innerHTML = "";
       return;
     }
-    tbody.innerHTML = rows.map(s => `
+
+    // Rendering every row at once locked the tab up for seconds on a busy
+    // server, so the table is paged the same way the log view is.
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / state.sessionsPageSize));
+    if (state.sessionsPage >= totalPages) state.sessionsPage = totalPages - 1;
+    if (state.sessionsPage < 0) state.sessionsPage = 0;
+    const start = state.sessionsPage * state.sessionsPageSize;
+    const pageRows = rows.slice(start, start + state.sessionsPageSize);
+
+    document.getElementById("sessionCountHint").textContent =
+      `${total} сессий, суммарно ${fmtDuration(totalMs)} · показано ${start + 1}–${start + pageRows.length}`;
+
+    pager.innerHTML = `
+      <button id="sessPrev" ${state.sessionsPage === 0 ? "disabled" : ""}>← назад</button>
+      <span>Страница ${state.sessionsPage + 1} из ${totalPages}</span>
+      <button id="sessNext" ${state.sessionsPage >= totalPages - 1 ? "disabled" : ""}>вперёд →</button>`;
+    document.getElementById("sessPrev").onclick = () => { state.sessionsPage--; renderSessions(); };
+    document.getElementById("sessNext").onclick = () => { state.sessionsPage++; renderSessions(); };
+
+    tbody.innerHTML = pageRows.map(s => `
       <tr>
         <td class="mono"><span class="ip-link" data-user="${escapeHtml(s.username)}">${escapeHtml(s.username)}</span></td>
         <td class="mono">${fmtTime(s.startMs)}</td>
@@ -1955,7 +1999,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
   document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
   document.getElementById("exportSessionsBtn").addEventListener("click", exportSessionsCsv);
   ["sessionSearch", "sessionOnlyRdp"].forEach(id => {
-    document.getElementById(id).addEventListener("input", renderSessions);
+    document.getElementById(id).addEventListener("input", () => { state.sessionsPage = 0; renderSessions(); });
   });
   document.querySelectorAll("#sessionTable th").forEach(th => {
     th.addEventListener("click", () => {
