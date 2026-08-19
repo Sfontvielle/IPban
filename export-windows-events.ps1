@@ -284,7 +284,19 @@ if ($Diagnose) {
         }
 
         try {
-            $ev = Get-WinEvent -FilterHashtable @{ LogName = $spec.Log; Id = $spec.Ids; StartTime = $startTime } -ErrorAction Stop
+            # На большом журнале сам запрос к службе журнала событий (не
+            # разбор — он уже быстрый) может занять до минуты: Windows
+            # обрабатывает фильтр с несколькими Id медленнее, чем с одним.
+            # Ограничиваем последними 5000 событиями каждого вида — этого
+            # достаточно, чтобы увидеть, какие типы входа и какие люди
+            # вообще встречаются, а диагностика не превращается в ту же
+            # долгую выгрузку, которую она должна заменить.
+            $diagMax = 5000
+            Write-Host ("  запрашиваю события (до {0} шт., может занять до минуты)..." -f $diagMax) -ForegroundColor DarkGray
+            $ev = Get-WinEvent -FilterHashtable @{ LogName = $spec.Log; Id = $spec.Ids; StartTime = $startTime } -MaxEvents $diagMax -ErrorAction Stop
+            if (@($ev).Count -eq $diagMax) {
+                Write-Host ("  (показаны {0} самых свежих событий — их может быть больше)" -f $diagMax) -ForegroundColor DarkGray
+            }
             $ev | Group-Object Id | Sort-Object Name | ForEach-Object {
                 Write-Host ("  событие {0}: {1} шт." -f $_.Name, $_.Count)
             }
