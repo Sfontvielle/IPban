@@ -41,6 +41,17 @@
 .PARAMETER Uninstall
     Удалить ранее созданную задачу из Планировщика.
 
+.PARAMETER Diagnose
+    Показать, что реально лежит в журналах (какие события, типы входа и
+    пользователи), и выйти без выгрузки. Помогает понять, почему в дашборде
+    видно меньше людей, чем ожидалось.
+
+.PARAMETER ComputerName
+    Список компьютеров, с которых собирать события. Важно: человек, который
+    работает за своим ПК, входит в систему НА СВОЁМ компьютере — событие
+    пишется в журнал этой машины, а не сервера. Журнал одного сервера
+    покажет только тех, кто заходил на него самого.
+
 .EXAMPLE
     # Разовая выгрузка за последние 7 дней
     .\export-windows-events.ps1 -OutputDir C:\IPBan\windows-events
@@ -48,6 +59,19 @@
 .EXAMPLE
     # Настроить автоматическую выгрузку каждые 15 минут
     .\export-windows-events.ps1 -OutputDir C:\IPBan\windows-events -Install
+
+.EXAMPLE
+    # Посмотреть, что есть в журналах, без выгрузки
+    .\export-windows-events.ps1 -Diagnose
+
+.EXAMPLE
+    # Собрать события с рабочих станций сотрудников, а не только с сервера
+    .\export-windows-events.ps1 -OutputDir C:\IPBan\windows-events -ComputerName PC-01, PC-02, PC-03
+
+.EXAMPLE
+    # Все компьютеры домена (нужен модуль ActiveDirectory)
+    $pcs = (Get-ADComputer -Filter { OperatingSystem -like "*Windows*" }).Name
+    .\export-windows-events.ps1 -OutputDir C:\IPBan\windows-events -ComputerName $pcs
 
 .NOTES
     Требуются права администратора: журнал Security недоступен обычному
@@ -61,7 +85,8 @@ param(
     [switch] $Install,
     [int]    $IntervalMinutes = 15,
     [switch] $Uninstall,
-    [switch] $Diagnose
+    [switch] $Diagnose,
+    [string[]] $ComputerName
 )
 
 $ErrorActionPreference = "Stop"
@@ -284,7 +309,19 @@ if ($Diagnose) {
         }
 
         try {
-            $ev = Get-WinEvent -FilterHashtable @{ LogName = $spec.Log; Id = $spec.Ids; StartTime = $startTime } -ErrorAction Stop
+            # На большом журнале сам запрос к службе журнала событий (не
+            # разбор — он уже быстрый) может занять до минуты: Windows
+            # обрабатывает фильтр с несколькими Id медленнее, чем с одним.
+            # Ограничиваем последними 5000 событиями каждого вида — этого
+            # достаточно, чтобы увидеть, какие типы входа и какие люди
+            # вообще встречаются, а диагностика не превращается в ту же
+            # долгую выгрузку, которую она должна заменить.
+            $diagMax = 5000
+            Write-Host ("  запрашиваю события (до {0} шт., может занять до минуты)..." -f $diagMax) -ForegroundColor DarkGray
+            $ev = Get-WinEvent -FilterHashtable @{ LogName = $spec.Log; Id = $spec.Ids; StartTime = $startTime } -MaxEvents $diagMax -ErrorAction Stop
+            if (@($ev).Count -eq $diagMax) {
+                Write-Host ("  (показаны {0} самых свежих событий — их может быть больше)" -f $diagMax) -ForegroundColor DarkGray
+            }
             $ev | Group-Object Id | Sort-Object Name | ForEach-Object {
                 Write-Host ("  событие {0}: {1} шт." -f $_.Name, $_.Count)
             }
@@ -324,28 +361,46 @@ if ($Diagnose) {
     return
 }
 
-foreach ($spec in $LogSpecs) {
-    try {
-        $events = Get-WinEvent -FilterHashtable @{
-            LogName   = $spec.Log
-            Id        = $spec.Ids
-            StartTime = $startTime
-        } -ErrorAction Stop
+# Люди, работающие за своими компьютерами, входят в систему НА СВОЕЙ машине —
+# их событие 4624 пишется в журнал того ПК, а не шлюза. Поэтому журнал одного
+# сервера показывает только тех, кто заходил на него самого. -ComputerName
+# позволяет собрать события со всех нужных машин в одну выгрузку.
+$targets = if ($ComputerName) { $ComputerName } else { @($env:COMPUTERNAME) }
 
-        Write-Host ("{0}: найдено {1} событий, разбираю..." -f $spec.Label, @($events).Count) -ForegroundColor Gray
-        Add-Records -Events $events -SourceLog $spec.Label
-        Write-Progress -Activity "Разбор журнала $($spec.Label)" -Completed
+foreach ($target in $targets) {
+    $isLocal = ($target -eq $env:COMPUTERNAME)
+    if (-not $isLocal) {
+        Write-Host ("--- Компьютер: {0}" -f $target) -ForegroundColor Cyan
     }
-    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
-        Write-Warning ("Журнал не найден: {0}" -f $spec.Log)
-        Write-Warning ("  {0}" -f $spec.Hint)
-    }
-    catch {
-        if ($_.Exception.Message -match 'No events were found|Не найдено событий') {
-            Write-Host ("{0}: событий за период не найдено" -f $spec.Label) -ForegroundColor Gray
-        } else {
-            Write-Warning ("Не удалось прочитать {0}: {1}" -f $spec.Log, $_.Exception.Message)
+
+    foreach ($spec in $LogSpecs) {
+        try {
+            $query = @{
+                LogName   = $spec.Log
+                Id        = $spec.Ids
+                StartTime = $startTime
+            }
+            $events = if ($isLocal) {
+                Get-WinEvent -FilterHashtable $query -ErrorAction Stop
+            } else {
+                Get-WinEvent -FilterHashtable $query -ComputerName $target -ErrorAction Stop
+            }
+
+            Write-Host ("{0}: найдено {1} событий, разбираю..." -f $spec.Label, @($events).Count) -ForegroundColor Gray
+            Add-Records -Events $events -SourceLog $spec.Label
+            Write-Progress -Activity "Разбор журнала $($spec.Label)" -Completed
+        }
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
+            Write-Warning ("[{0}] Журнал не найден: {1}" -f $target, $spec.Log)
             Write-Warning ("  {0}" -f $spec.Hint)
+        }
+        catch {
+            if ($_.Exception.Message -match 'No events were found|Не найдено событий') {
+                Write-Host ("{0}: событий за период не найдено" -f $spec.Label) -ForegroundColor Gray
+            } else {
+                Write-Warning ("[{0}] Не удалось прочитать {1}: {2}" -f $target, $spec.Log, $_.Exception.Message)
+                Write-Warning ("  {0}" -f $spec.Hint)
+            }
         }
     }
 }
