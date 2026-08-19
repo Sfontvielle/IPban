@@ -67,6 +67,19 @@ param(
 $ErrorActionPreference = "Stop"
 $TaskName = "IPBanDashboard-ExportWindowsEvents"
 
+# Расшифровка LogonType из события 4624 — используется в диагностике
+$LogonTypeNames = @{
+    '2'  = 'локальный вход'
+    '3'  = 'сетевой доступ'
+    '4'  = 'пакетное задание'
+    '5'  = 'служба'
+    '7'  = 'разблокировка'
+    '8'  = 'сетевой (открытый пароль)'
+    '9'  = 'новые учётные данные'
+    '10' = 'RDP (удалённый рабочий стол)'
+    '11' = 'кэшированный вход'
+}
+
 # --------------------------------------------------------------------------
 # Установка / удаление задачи в Планировщике
 # --------------------------------------------------------------------------
@@ -106,29 +119,42 @@ if ($Install) {
 # --------------------------------------------------------------------------
 # Вспомогательное: вытащить именованные поля события из его XML
 # --------------------------------------------------------------------------
+# Поля достаются регулярными выражениями по XML-строке, а не через [xml].
+# Приведение к DOM стоит дорого, и на журнале Security в десятки тысяч
+# событий оно превращает выгрузку в многоминутное ожидание.
+$script:ReData  = [regex]::new("<Data Name='([^']+)'\s*>(.*?)</Data>", 'Singleline')
+$script:ReUser  = [regex]::new("<(User|SessionID|Address|Param\d+)\s*>(.*?)</\1>", 'Singleline')
+
+function Expand-XmlEntities {
+    param([string] $Value)
+    if (-not $Value) { return $Value }
+    if ($Value.IndexOf('&') -lt 0) { return $Value }
+    return $Value.Replace('&lt;', '<').Replace('&gt;', '>').
+                  Replace('&quot;', '"').Replace('&apos;', "'").
+                  Replace('&amp;', '&')
+}
+
 function Get-EventFields {
     param($Event)
 
     $fields = @{}
     try {
-        $xml = [xml] $Event.ToXml()
+        $xmlStr = $Event.ToXml()
     } catch {
         return $fields
     }
+    if (-not $xmlStr) { return $fields }
 
-    # Обычные события Security кладут поля в EventData/Data с атрибутом Name
-    if ($xml.Event.EventData) {
-        foreach ($d in $xml.Event.EventData.Data) {
-            if ($d.Name) { $fields[$d.Name] = [string]$d.'#text' }
-        }
+    # Обычные события Security: <Data Name='TargetUserName'>значение</Data>
+    foreach ($m in $script:ReData.Matches($xmlStr)) {
+        $fields[$m.Groups[1].Value] = Expand-XmlEntities $m.Groups[2].Value
     }
 
-    # События TerminalServices кладут поля в UserData/<...>/<поле>
-    if ($xml.Event.UserData) {
-        foreach ($container in $xml.Event.UserData.ChildNodes) {
-            foreach ($node in $container.ChildNodes) {
-                $fields[$node.LocalName] = [string]$node.'#text'
-            }
+    # События TerminalServices: <User>, <SessionID>, <Address>, <ParamN>
+    foreach ($m in $script:ReUser.Matches($xmlStr)) {
+        $name = $m.Groups[1].Value
+        if (-not $fields.ContainsKey($name)) {
+            $fields[$name] = Expand-XmlEntities $m.Groups[2].Value
         }
     }
 
@@ -148,7 +174,16 @@ $records = New-Object System.Collections.Generic.List[object]
 function Add-Records {
     param($Events, [string]$SourceLog)
 
+    $total = @($Events).Count
+    $n = 0
     foreach ($ev in $Events) {
+        $n++
+        # Без этого на журнале в десятки тысяч событий выглядит как зависание
+        if ($total -gt 2000 -and ($n % 1000) -eq 0) {
+            Write-Progress -Activity "Разбор журнала $SourceLog" `
+                -Status "$n из $total" -PercentComplete ([int](100 * $n / $total))
+        }
+
         $f  = Get-EventFields -Event $ev
         $id = [int]$ev.Id
 
@@ -218,31 +253,6 @@ $LogSpecs = @(
        Hint = 'Здесь видно каждое RDP-подключение доменных пользователей.' }
 )
 
-foreach ($spec in $LogSpecs) {
-    try {
-        $events = Get-WinEvent -FilterHashtable @{
-            LogName   = $spec.Log
-            Id        = $spec.Ids
-            StartTime = $startTime
-        } -ErrorAction Stop
-
-        Add-Records -Events $events -SourceLog $spec.Label
-        Write-Host ("{0}: получено {1} событий" -f $spec.Label, $events.Count) -ForegroundColor Gray
-    }
-    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
-        Write-Warning ("Журнал не найден: {0}" -f $spec.Log)
-        Write-Warning ("  {0}" -f $spec.Hint)
-    }
-    catch {
-        if ($_.Exception.Message -match 'No events were found|Не найдено событий') {
-            Write-Host ("{0}: событий за период не найдено" -f $spec.Label) -ForegroundColor Gray
-        } else {
-            Write-Warning ("Не удалось прочитать {0}: {1}" -f $spec.Log, $_.Exception.Message)
-            Write-Warning ("  {0}" -f $spec.Hint)
-        }
-    }
-}
-
 # --------------------------------------------------------------------------
 # Диагностика: показать, что реально лежит в журналах
 # --------------------------------------------------------------------------
@@ -278,10 +288,65 @@ if ($Diagnose) {
             $ev | Group-Object Id | Sort-Object Name | ForEach-Object {
                 Write-Host ("  событие {0}: {1} шт." -f $_.Name, $_.Count)
             }
+
+            # Разбивка входов по типу и список людей. Читается из .Properties
+            # (позиционно, без разбора XML) — иначе на десятках тысяч событий
+            # диагностика была бы такой же долгой, как сама выгрузка.
+            $logons = @($ev | Where-Object { $_.Id -eq 4624 })
+            if ($logons.Count -gt 0) {
+                Write-Host "  входы 4624 по типу:"
+                $logons | Group-Object { $_.Properties[8].Value } | Sort-Object Name | ForEach-Object {
+                    $t = [string]$_.Name
+                    $label = $LogonTypeNames[$t]
+                    if (-not $label) { $label = 'иной' }
+                    Write-Host ("    тип {0} ({1}): {2} шт." -f $t, $label, $_.Count)
+                }
+
+                $people = $logons |
+                    ForEach-Object { [string]$_.Properties[5].Value } |
+                    Where-Object { $_ -and $_ -notmatch '\$$' -and
+                                   $_ -notmatch '^(SYSTEM|LOCAL SERVICE|NETWORK SERVICE|ANONYMOUS LOGON|DWM-\d+|UMFD-\d+)$' } |
+                    Select-Object -Unique | Sort-Object
+                Write-Host ("  разных пользователей во входах: {0}" -f $people.Count)
+                if ($people.Count -gt 0) {
+                    Write-Host ("    {0}" -f ($people -join ", ")) -ForegroundColor Gray
+                }
+            }
         } catch {
             Write-Host "  событий за период нет"
         }
         Write-Host ""
+    }
+
+    Write-Host "Диагностика завершена (выгрузка не выполнялась)." -ForegroundColor Cyan
+    Write-Host "Если нужных пользователей нет в списке событий — их нет и в журнале," -ForegroundColor Cyan
+    Write-Host "и дашборд их показать не сможет: искать причину надо на стороне Windows." -ForegroundColor Cyan
+    return
+}
+
+foreach ($spec in $LogSpecs) {
+    try {
+        $events = Get-WinEvent -FilterHashtable @{
+            LogName   = $spec.Log
+            Id        = $spec.Ids
+            StartTime = $startTime
+        } -ErrorAction Stop
+
+        Write-Host ("{0}: найдено {1} событий, разбираю..." -f $spec.Label, @($events).Count) -ForegroundColor Gray
+        Add-Records -Events $events -SourceLog $spec.Label
+        Write-Progress -Activity "Разбор журнала $($spec.Label)" -Completed
+    }
+    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
+        Write-Warning ("Журнал не найден: {0}" -f $spec.Log)
+        Write-Warning ("  {0}" -f $spec.Hint)
+    }
+    catch {
+        if ($_.Exception.Message -match 'No events were found|Не найдено событий') {
+            Write-Host ("{0}: событий за период не найдено" -f $spec.Label) -ForegroundColor Gray
+        } else {
+            Write-Warning ("Не удалось прочитать {0}: {1}" -f $spec.Log, $_.Exception.Message)
+            Write-Warning ("  {0}" -f $spec.Hint)
+        }
     }
 }
 
