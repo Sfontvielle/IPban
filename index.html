@@ -266,16 +266,33 @@ td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .badge.radius-bad { background: var(--danger-dim); color: var(--danger); }
 .badge.win { background: var(--win-c-dim); color: var(--win-c); }
 .badge.src { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); font-weight: 500; }
+.badge.danger { background: var(--danger-dim); color: var(--danger); }
+.badge.ok { background: var(--ok-dim); color: var(--ok); }
+.badge.neutral { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
 
+/* Color follows outcome (принято = зелёный, отказано = красный), not which
+   system produced the line — a subtle background tint plus the border makes
+   the status readable while scanning, not just when reading the badge. */
 .log-row { border-left: 4px solid transparent; }
-.log-row.type-ban { border-left-color: var(--danger); }
-.log-row.type-unban, .log-row.type-whitelist { border-left-color: var(--ok); }
-.log-row.type-failed-login, .log-row.type-login-attempt { border-left-color: var(--warn); }
-.log-row.type-auth-accept, .log-row.type-auth-reject { border-left-color: var(--radius-c); }
-.log-row.type-win-logon, .log-row.type-win-logoff, .log-row.type-win-reconnect,
-.log-row.type-win-disconnect, .log-row.type-win-shell,
-.log-row.type-win-rdp-auth { border-left-color: var(--win-c); }
-.log-row.type-win-failed { border-left-color: var(--danger); }
+.log-row.type-ban, .log-row.type-auth-reject, .log-row.type-win-failed {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--bg-panel));
+}
+.log-row.type-unban, .log-row.type-whitelist, .log-row.type-auth-accept, .log-row.type-win-logon {
+  border-left-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 7%, var(--bg-panel));
+}
+.log-row.type-failed-login, .log-row.type-login-attempt {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg-panel));
+}
+.log-row.type-win-reconnect, .log-row.type-win-rdp-auth {
+  border-left-color: var(--win-c);
+  background: color-mix(in srgb, var(--win-c) 6%, var(--bg-panel));
+}
+.log-row.type-win-logoff, .log-row.type-win-disconnect, .log-row.type-win-shell {
+  border-left-color: var(--text-dim);
+}
 .msg-ru { font-weight: 600; margin-bottom: 2px; }
 .msg-raw { color: var(--text-dim); font-size: 11.5px; }
 
@@ -431,7 +448,9 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
       <span class="hint">—</span>
       <input type="datetime-local" id="logDateTo">
     </span>
-    <label class="chk"><input type="checkbox" id="hideNoise" checked> скрыть служебные строки</label>
+    <label class="chk" title="Скрывает внутреннюю техническую переписку сервисов, а также локальные и сетевые входы Windows (общие папки, групповые политики, службы) — оставляет только то, что связано с удалённым подключением: RDP, отказы входа, 2ФА.">
+      <input type="checkbox" id="hideNoise" checked> скрыть служебные строки
+    </label>
     <span class="hint" id="logCountHint"></span>
   </div>
   <div class="table-wrap">
@@ -559,7 +578,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     ipTableName: null,
     logsPage: 0,
     logsPageSize: 50,
-    logsSort: { key: "time", dir: 1 },
+    logsSort: { key: "time", dir: -1 },
     ipSort: { key: "failedCount", dir: -1 },
     userSort: { key: "failCount", dir: -1 },
     sessionSort: { key: "startMs", dir: -1 },
@@ -944,6 +963,24 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     1149: "win-rdp-auth",
   };
 
+  // The Security log logs LogonType 3 (network — file shares, group policy,
+  // service-to-service auth) constantly; on a busy server it's the vast
+  // majority of 4624 events and drowns out the RDP activity this dashboard
+  // is actually for. Only remote-relevant Windows events count as
+  // non-noise: RDP logon/logoff (type 10), any failed logon (4625 — always
+  // worth seeing, since that's exactly what a remote brute-force looks
+  // like), and the TerminalServices session/connection events, which are
+  // RDP-specific by definition.
+  const REMOTE_RELEVANT_IDS = new Set([4625, 21, 23, 24, 25, 1149]);
+
+  function isRemoteRelevantWinEvent(id, logonType) {
+    if (REMOTE_RELEVANT_IDS.has(id)) return true;
+    if (id === 4624 || id === 4634 || id === 4647 || id === 4778 || id === 4779) {
+      return logonType === 10;
+    }
+    return false;
+  }
+
   // Fallback for a raw `Get-WinEvent | Export-Csv` dump, which has no
   // dedicated columns — the interesting values only exist inside the
   // human-readable Message blob. Both 4624 and 4625 mention an account twice
@@ -1041,7 +1078,7 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
         message: `Windows ${id}: ${label}${user ? ` — ${domain ? domain + "\\" : ""}${user}` : ""}${detail ? ` (${detail})` : ""}`,
         humanized: `${label}${user ? ` (${user})` : ""}${detail ? ` — ${detail}` : ""}`,
         raw: row.join(","),
-        noise: false,
+        noise: !isRemoteRelevantWinEvent(id, typeNum),
         win: { id, user, domain, logonId, logonType: typeNum, ip, workstation, sessionId },
       });
     }
@@ -1461,25 +1498,30 @@ code { background: var(--bg); border: 1px solid var(--border); border-radius: 4p
     return `<span class="badge ${cls}">${escapeHtml(level)}</span>`;
   }
 
+  // Color follows outcome, not source: green always means "принято/успех",
+  // red always means "отказано/отклонено", regardless of whether the event
+  // came from IPBan, RadiusProxy or Windows. An icon rides along too, so the
+  // status still reads for colorblind users and doesn't depend on color alone.
   function badgeForType(type) {
-    const labels = {
-      ban: "Бан", unban: "Разбан", whitelist: "Белый список",
-      "failed-login": "Неудачный вход", "login-attempt": "Попытка входа",
-      "auth-reject": "RADIUS: отказ", "auth-accept": "RADIUS: принято",
-      "win-logon": "Windows: вход", "win-logoff": "Windows: выход",
-      "win-failed": "Windows: отказ", "win-reconnect": "Windows: переподключение",
-      "win-disconnect": "Windows: отключение", "win-shell": "Windows: рабочий стол",
-      "win-rdp-auth": "RDP: подключение",
-      info: "Инфо",
+    const info = {
+      ban:              ["Бан", "danger", "⛔"],
+      unban:            ["Разбан", "ok", "✅"],
+      whitelist:        ["Белый список", "ok", "✅"],
+      "failed-login":   ["Неудачный вход", "warn", "⚠️"],
+      "login-attempt":  ["Попытка входа", "warn", "⚠️"],
+      "auth-reject":    ["RADIUS: отказ", "danger", "❌"],
+      "auth-accept":    ["RADIUS: принято", "ok", "✅"],
+      "win-logon":      ["Windows: вход", "ok", "✅"],
+      "win-logoff":     ["Windows: выход", "neutral", "↩️"],
+      "win-failed":     ["Windows: отказ", "danger", "❌"],
+      "win-reconnect":  ["Windows: переподключение", "win", "🔄"],
+      "win-disconnect": ["Windows: отключение", "neutral", "⏸️"],
+      "win-shell":      ["Windows: рабочий стол", "neutral", "🖥️"],
+      "win-rdp-auth":   ["RDP: подключение", "win", "🔌"],
+      info:             ["Инфо", "info", ""],
     };
-    const cls = type === "ban" ? "banned"
-      : type === "whitelist" ? "whitelisted"
-      : type === "auth-reject" ? "radius-bad"
-      : type === "auth-accept" ? "radius-ok"
-      : type === "win-failed" ? "banned"
-      : type && type.startsWith("win-") ? "win"
-      : type === "unban" ? "seen" : "info";
-    return `<span class="badge ${cls}">${labels[type] || type}</span>`;
+    const [label, cls, icon] = info[type] || [type, "info", ""];
+    return `<span class="badge ${cls}">${icon ? icon + " " : ""}${escapeHtml(label)}</span>`;
   }
 
   function currentDateRange() {
