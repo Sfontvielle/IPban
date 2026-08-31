@@ -1,0 +1,18 @@
+name = "gymlog-ai"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Хранилище лимитов запросов. ID подставляется после команды:
+#   npx wrangler kv namespace create RATE_LIMIT
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "ЗАМЕНИТЕ_НА_СВОЙ_ID"
+
+[vars]
+# Модель можно менять здесь, приложение переустанавливать не нужно.
+MODEL = "claude-sonnet-5"
+MAX_REQUESTS_PER_HOUR = "60"
+
+# Секреты задаются отдельно и в коде НЕ хранятся:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put DEVICE_TOKEN
