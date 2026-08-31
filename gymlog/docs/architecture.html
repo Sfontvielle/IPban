@@ -1,0 +1,1734 @@
+<title>GymLog Architecture</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Golos+Text:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F2F3F5; --surface:#FFFFFF; --surface-2:#E9ECEF; --surface-3:#DFE4E9;
+  --ink:#14181D; --ink-2:#4A535E; --ink-3:#6E7986;
+  --line:#D6DBE1; --line-strong:#B9C2CC;
+  --accent:#1D4F91; --accent-ink:#1D4F91; --accent-soft:#E4EBF5;
+  --ok:#2E7D52; --ok-soft:#E3F1EA;
+  --warn:#9C6F00; --warn-soft:#F7EDD5;
+  --crit:#B3202F; --crit-soft:#F8E4E6;
+  --shadow:0 1px 2px rgba(20,24,29,.06), 0 8px 24px rgba(20,24,29,.05);
+  --radius:10px;
+  --font-display:"Oswald","Arial Narrow",Impact,sans-serif;
+  --font-body:"Golos Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:"IBM Plex Mono","Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1216; --surface:#161B21; --surface-2:#1E252D; --surface-3:#27303A;
+    --ink:#E7ECF2; --ink-2:#9DAAB8; --ink-3:#7C8894;
+    --line:#28313B; --line-strong:#3A4653;
+    --accent:#6FA8E8; --accent-ink:#8FBEF2; --accent-soft:#152538;
+    --ok:#5FBE8E; --ok-soft:#12291F;
+    --warn:#E0B44A; --warn-soft:#2A2313;
+    --crit:#EE7A87; --crit-soft:#2E1519;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1216; --surface:#161B21; --surface-2:#1E252D; --surface-3:#27303A;
+  --ink:#E7ECF2; --ink-2:#9DAAB8; --ink-3:#7C8894;
+  --line:#28313B; --line-strong:#3A4653;
+  --accent:#6FA8E8; --accent-ink:#8FBEF2; --accent-soft:#152538;
+  --ok:#5FBE8E; --ok-soft:#12291F;
+  --warn:#E0B44A; --warn-soft:#2A2313;
+  --crit:#EE7A87; --crit-soft:#2E1519;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:var(--font-body); font-size:16px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent-soft); color:var(--ink)}
+
+/* ---------- masthead ---------- */
+.masthead{
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+  padding:34px 24px 26px;
+}
+.masthead-in{max-width:1240px; margin:0 auto; display:flex; flex-wrap:wrap; gap:24px; align-items:flex-end; justify-content:space-between}
+.brand{display:flex; flex-direction:column; gap:6px}
+.brand-eyebrow{
+  font-family:var(--font-display); font-weight:500; font-size:12px;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--accent-ink);
+}
+.brand h1{
+  font-family:var(--font-display); font-weight:600; font-size:clamp(30px,5vw,46px);
+  letter-spacing:.01em; line-height:1.02; margin:0; text-wrap:balance;
+}
+.brand p{margin:2px 0 0; color:var(--ink-2); max-width:60ch; font-size:15px}
+.stamp{
+  border:1px solid var(--line-strong); border-radius:var(--radius);
+  padding:12px 16px; background:var(--surface-2);
+  font-family:var(--font-mono); font-size:12px; line-height:1.9; color:var(--ink-2);
+  white-space:nowrap;
+}
+.stamp b{color:var(--ink); font-weight:500}
+
+/* ---------- shell ---------- */
+.shell{max-width:1240px; margin:0 auto; padding:0 24px 96px; display:grid; grid-template-columns:1fr; gap:40px}
+@media (min-width:1080px){ .shell{grid-template-columns:236px minmax(0,1fr); gap:56px; padding-top:8px} }
+
+nav.toc{display:none}
+@media (min-width:1080px){
+  nav.toc{
+    display:block; position:sticky; top:0; align-self:start;
+    max-height:100vh; overflow-y:auto; padding:28px 0 40px;
+    border-right:1px solid var(--line);
+  }
+}
+nav.toc h2{
+  font-family:var(--font-display); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--ink-3); font-weight:500; margin:0 0 12px;
+}
+nav.toc ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px}
+nav.toc a{
+  display:grid; grid-template-columns:26px 1fr; gap:6px; align-items:baseline;
+  color:var(--ink-2); text-decoration:none; font-size:13.5px; line-height:1.35;
+  padding:5px 10px 5px 0; border-radius:6px;
+}
+nav.toc a span{font-family:var(--font-mono); font-size:11px; color:var(--ink-3)}
+nav.toc a:hover{color:var(--accent-ink)}
+nav.toc a:hover span{color:var(--accent-ink)}
+nav.toc a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+nav.toc li.grp{margin-top:14px}
+nav.toc li.grp::before{
+  content:attr(data-label); display:block; font-family:var(--font-display);
+  font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-3);
+  padding-bottom:5px; margin-bottom:3px; border-bottom:1px solid var(--line);
+}
+
+main{min-width:0; padding-top:28px}
+
+/* ---------- sections ---------- */
+section{padding:26px 0 8px; border-top:1px solid var(--line)}
+section:first-of-type{border-top:none; padding-top:8px}
+.sec-head{display:flex; gap:14px; align-items:baseline; margin-bottom:14px}
+.sec-num{
+  font-family:var(--font-mono); font-size:12px; color:var(--accent-ink);
+  border:1px solid var(--line-strong); border-radius:5px; padding:2px 7px;
+  background:var(--surface); flex:none;
+}
+h2.sec-title{
+  font-family:var(--font-display); font-weight:500; font-size:clamp(21px,2.6vw,27px);
+  letter-spacing:.005em; margin:0; line-height:1.15; text-wrap:balance;
+}
+h3{
+  font-family:var(--font-display); font-weight:500; font-size:16px; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--ink); margin:26px 0 10px;
+}
+h4{font-family:var(--font-body); font-weight:600; font-size:15px; margin:18px 0 6px}
+p{margin:0 0 12px; max-width:74ch}
+ul,ol{margin:0 0 14px; padding-left:22px; max-width:74ch}
+li{margin:0 0 5px}
+li::marker{color:var(--ink-3)}
+strong{font-weight:600}
+a{color:var(--accent-ink)}
+code{
+  font-family:var(--font-mono); font-size:.87em; background:var(--surface-2);
+  border:1px solid var(--line); border-radius:5px; padding:.06em .34em;
+}
+hr{border:none; border-top:1px solid var(--line); margin:22px 0}
+
+/* ---------- blocks ---------- */
+.wide{overflow-x:auto; margin:16px 0; border-radius:var(--radius)}
+pre{
+  font-family:var(--font-mono); font-size:12.5px; line-height:1.65;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px 18px; margin:0; overflow-x:auto; color:var(--ink);
+}
+pre b{color:var(--accent-ink); font-weight:500}
+pre i{color:var(--ink-3); font-style:normal}
+.code-label{
+  font-family:var(--font-mono); font-size:11px; color:var(--ink-3);
+  padding:0 0 6px 2px; letter-spacing:.02em;
+}
+table{
+  border-collapse:collapse; width:100%; min-width:520px;
+  font-size:14px; background:var(--surface);
+}
+th,td{border:1px solid var(--line); padding:8px 11px; text-align:left; vertical-align:top}
+th{
+  background:var(--surface-2); font-family:var(--font-display); font-weight:500;
+  font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2);
+}
+td code{background:transparent; border:none; padding:0; color:var(--accent-ink)}
+tbody tr:hover{background:var(--surface-2)}
+.num{font-variant-numeric:tabular-nums}
+
+.callout{
+  border:1px solid var(--line); border-left:3px solid var(--accent);
+  background:var(--surface); border-radius:var(--radius);
+  padding:14px 16px; margin:16px 0; box-shadow:var(--shadow);
+}
+.callout .k{
+  font-family:var(--font-display); font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent-ink); display:block; margin-bottom:5px;
+}
+.callout p:last-child, .callout ul:last-child{margin-bottom:0}
+.callout.warn{border-left-color:var(--warn)} .callout.warn .k{color:var(--warn)}
+.callout.crit{border-left-color:var(--crit)} .callout.crit .k{color:var(--crit)}
+.callout.ok{border-left-color:var(--ok)} .callout.ok .k{color:var(--ok)}
+
+.chip{
+  display:inline-block; font-family:var(--font-mono); font-size:11px;
+  border-radius:99px; padding:2px 9px; border:1px solid var(--line-strong);
+  background:var(--surface-2); color:var(--ink-2); white-space:nowrap;
+}
+.chip.ok{background:var(--ok-soft); color:var(--ok); border-color:transparent}
+.chip.warn{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+.chip.crit{background:var(--crit-soft); color:var(--crit); border-color:transparent}
+.chip.acc{background:var(--accent-soft); color:var(--accent-ink); border-color:transparent}
+
+.cards{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); margin:16px 0}
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px 16px;
+}
+.card h4{margin:0 0 6px; font-family:var(--font-display); font-weight:500;
+  font-size:13px; letter-spacing:.09em; text-transform:uppercase; color:var(--accent-ink)}
+.card p{margin:0; font-size:14px; color:var(--ink-2)}
+
+pre.mermaid{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:18px; text-align:center; overflow-x:auto;
+}
+.foot{
+  border-top:1px solid var(--line); margin-top:40px; padding-top:18px;
+  font-size:13px; color:var(--ink-3); max-width:74ch;
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <div class="brand">
+      <div class="brand-eyebrow">GymLog &middot; Этап 1 &middot; Архитектура</div>
+      <h1>Персональный трекер тренировок с AI-тренером</h1>
+      <p>Полный технический план перед первой строкой кода: стек, слои, база данных,
+         каталог упражнений, аналитика, AI и порядок разработки.</p>
+    </div>
+    <div class="stamp">
+      Платформа&nbsp;&nbsp;<b>iOS (iPhone)</b><br>
+      Разработка&nbsp;&nbsp;<b>Windows + PowerShell</b><br>
+      Стек&nbsp;&nbsp;<b>Expo SDK 57 / RN 0.86</b><br>
+      Данные&nbsp;&nbsp;<b>SQLite, offline-first</b><br>
+      Дата&nbsp;&nbsp;<b>август 2026</b>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+<nav class="toc" aria-label="Содержание">
+  <h2>Содержание</h2>
+  <ol>
+    <li class="grp" data-label="Основа"><a href="#s1"><span>01</span>Оценка проекта</a></li>
+    <li><a href="#s2"><span>02</span>Технологический стек</a></li>
+    <li><a href="#s3"><span>03</span>Почему именно так</a></li>
+    <li><a href="#s4"><span>04</span>Схема приложения</a></li>
+    <li><a href="#s5"><span>05</span>Поток данных и AI</a></li>
+    <li class="grp" data-label="Интерфейс"><a href="#s6"><span>06</span>Карта экранов</a></li>
+    <li><a href="#s7"><span>07</span>Навигация</a></li>
+    <li><a href="#s8"><span>08</span>Структура папок</a></li>
+    <li class="grp" data-label="Данные"><a href="#s9"><span>09</span>Схема SQLite</a></li>
+    <li><a href="#s10"><span>10</span>Таблицы и связи</a></li>
+    <li><a href="#s11"><span>11</span>Исторические снимки</a></li>
+    <li><a href="#s12"><span>12</span>Каталог упражнений</a></li>
+    <li><a href="#s13"><span>13</span>Хранение изображений</a></li>
+    <li><a href="#s14"><span>14</span>Offline image cache</a></li>
+    <li><a href="#s15"><span>15</span>Поиск по каталогу</a></li>
+    <li class="grp" data-label="Логика"><a href="#s16"><span>16</span>Analytics layer</a></li>
+    <li><a href="#s17"><span>17</span>AI Context</a></li>
+    <li><a href="#s18"><span>18</span>AI Tools</a></li>
+    <li><a href="#s19"><span>19</span>Безопасный AI API</a></li>
+    <li class="grp" data-label="Режимы"><a href="#s20"><span>20</span>Работает offline</a></li>
+    <li><a href="#s21"><span>21</span>Требует интернет</a></li>
+    <li><a href="#s22"><span>22</span>Что даёт Expo Go</a></li>
+    <li><a href="#s23"><span>23</span>Когда нужен Dev Build</a></li>
+    <li class="grp" data-label="Старт"><a href="#s24"><span>24</span>Установка на Windows</a></li>
+    <li><a href="#s25"><span>25</span>Команды PowerShell</a></li>
+    <li><a href="#s26"><span>26</span>Запуск на iPhone</a></li>
+    <li class="grp" data-label="План"><a href="#s27"><span>27</span>Технические риски</a></li>
+    <li><a href="#s28"><span>28</span>MVP и отложенное</a></li>
+    <li><a href="#s29"><span>29</span>Порядок разработки</a></li>
+    <li><a href="#s30"><span>30</span>Решения на сейчас</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="sec-head"><span class="sec-num">01</span><h2 class="sec-title">Краткая оценка проекта</h2></div>
+  <p>Проект реалистичный, но это не «приложение на выходные». По объёму он делится на три очень разные части,
+     и важно не путать их сложность.</p>
+  <div class="cards">
+    <div class="card"><h4>Ядро трекера</h4><p>Шаблоны, активная тренировка, подходы, история, PR, графики.
+      Технически несложно, но требует аккуратности: здесь живут ваши данные, которые нельзя терять.</p></div>
+    <div class="card"><h4>Каталог упражнений</h4><p>Самая недооценённая часть. Код каталога пишется за пару дней,
+      а вот <em>данные и картинки</em> с чистой лицензией — это недели работы и главный риск проекта.</p></div>
+    <div class="card"><h4>AI-тренер</h4><p>Технически это не «прикрутить чат». Это отдельный слой инструментов
+      поверх вашей базы плюс минимальный сервер. Зато он не влияет на работоспособность трекера.</p></div>
+  </div>
+  <p>Реалистичные ориентиры при работе в темпе «вечерами и по выходным», с учётом того, что вы новичок:</p>
+  <div class="wide"><table>
+    <thead><tr><th>Блок</th><th>Этапы</th><th>Порядок трудозатрат</th><th>Результат</th></tr></thead>
+    <tbody>
+      <tr><td>Каркас: проект, дизайн-система, БД, миграции</td><td class="num">2–3</td><td class="num">~1 неделя</td><td>Приложение открывается на iPhone, база создаётся</td></tr>
+      <tr><td>Каталог + карточка упражнения</td><td class="num">4–5</td><td class="num">1–2 недели</td><td>Поиск и фильтры по нескольким сотням упражнений</td></tr>
+      <tr><td>Шаблоны + активная тренировка</td><td class="num">6–7</td><td class="num">2–3 недели</td><td>Можно реально тренироваться с телефоном</td></tr>
+      <tr><td>История, аналитика, PR, графики</td><td class="num">8–9</td><td class="num">1–2 недели</td><td><b>MVP из раздела 46 закрыт</b></td></tr>
+      <tr><td>RIR/RPE, таймер, самочувствие, полировка UX</td><td class="num">10–11</td><td class="num">1 неделя</td><td>Приложение приятно использовать в зале</td></tr>
+      <tr><td>AI: контекст, инструменты, сервер, анализ, чат</td><td class="num">12–17</td><td class="num">2–3 недели</td><td>AI-MVP из раздела 47</td></tr>
+      <tr><td>Backup/export, тесты, сборка для iPhone</td><td class="num">18–20</td><td class="num">1 неделя</td><td>Приложение живёт на телефоне без Expo Go</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><span class="k">Главный вывод</span>
+    <p>Технических блокеров нет: весь сценарий из раздела 46 полностью реализуем в Expo Go на Windows,
+       без Mac и без Xcode. Единственная часть, которая обязательно потребует денег и отдельного решения, —
+       это AI (оплата API + минимальный сервер) и финальная установка приложения на iPhone «навсегда»
+       (Apple Developer Account, 99 $/год) на этапе 20.</p></div>
+  <div class="callout warn"><span class="k">Организационное замечание</span>
+    <p>Сейчас мы находимся в репозитории <code>Sfontvielle/IPban</code> — это ваш проект про блокировку IP,
+       к GymLog он отношения не имеет. Этот документ я кладу в ветку <code>claude/gymlog-workout-tracker-m1qljw</code>,
+       чтобы он не потерялся, но <b>перед этапом 2 заведите отдельный репозиторий</b> (например <code>Sfontvielle/gymlog</code>).
+       Смешивать два несвязанных проекта в одном репозитории — плохая идея.</p></div>
+</section>
+
+<section id="s2">
+  <div class="sec-head"><span class="sec-num">02</span><h2 class="sec-title">Предлагаемый технологический стек</h2></div>
+  <p>Версии проверены по документации на август 2026. Всё, что помечено <span class="chip ok">Expo Go</span>,
+     работает на вашем iPhone без Mac и без нативной сборки.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Слой</th><th>Выбор</th><th>Версия</th><th>Статус</th></tr></thead>
+    <tbody>
+      <tr><td>Платформа</td><td>Expo SDK</td><td class="num">57</td><td><span class="chip ok">Expo Go</span></td></tr>
+      <tr><td>Runtime</td><td>React Native / React</td><td class="num">0.86 / 19.2</td><td>New Architecture по умолчанию</td></tr>
+      <tr><td>Язык</td><td>TypeScript <code>strict</code></td><td class="num">5.x</td><td>—</td></tr>
+      <tr><td>Навигация</td><td><code>expo-router</code></td><td class="num">~6</td><td><span class="chip ok">Expo Go</span> файловый роутинг, typed routes</td></tr>
+      <tr><td>База данных</td><td><code>expo-sqlite</code></td><td class="num">SDK 57</td><td><span class="chip ok">Expo Go</span> FTS5 включён по умолчанию</td></tr>
+      <tr><td>Доступ к БД</td><td>чистый SQL + свои repositories</td><td>—</td><td>без ORM, см. раздел 3</td></tr>
+      <tr><td>Состояние</td><td><code>zustand</code></td><td class="num">5.x</td><td>только активная тренировка, таймер, настройки</td></tr>
+      <tr><td>Графики</td><td><code>react-native-gifted-charts</code> + <code>react-native-svg</code></td><td class="num">latest</td><td><span class="chip ok">Expo Go</span> без нативного кода</td></tr>
+      <tr><td>Изображения</td><td><code>expo-image</code></td><td class="num">SDK 57</td><td><span class="chip ok">Expo Go</span> встроенный disk cache</td></tr>
+      <tr><td>Тактильный отклик</td><td><code>expo-haptics</code></td><td class="num">SDK 57</td><td><span class="chip ok">Expo Go</span></td></tr>
+      <tr><td>Уведомления</td><td><code>expo-notifications</code></td><td class="num">SDK 57</td><td><span class="chip warn">частично</span> локальные — да, push — нет</td></tr>
+      <tr><td>Файлы и ассеты</td><td><code>expo-file-system</code>, <code>expo-asset</code></td><td class="num">SDK 57</td><td><span class="chip ok">Expo Go</span></td></tr>
+      <tr><td>ID и токены</td><td><code>expo-crypto</code>, <code>expo-secure-store</code></td><td class="num">SDK 57</td><td><span class="chip ok">Expo Go</span></td></tr>
+      <tr><td>Жесты и анимация</td><td><code>react-native-gesture-handler</code> ~2.32, <code>react-native-reanimated</code> 4.5</td><td class="num">SDK 57</td><td><span class="chip ok">Expo Go</span> входят в клиент</td></tr>
+      <tr><td>Drag &amp; drop списки</td><td><code>react-native-reorderable-list</code></td><td class="num">latest</td><td><span class="chip ok">Expo Go</span> поверх reanimated, этап 6</td></tr>
+      <tr><td>Тесты</td><td><code>jest-expo</code> + <code>@testing-library/react-native</code></td><td class="num">latest</td><td>только на компьютере</td></tr>
+      <tr><td>Линт / формат</td><td><code>eslint-config-expo</code> + Prettier</td><td class="num">latest</td><td>—</td></tr>
+      <tr><td>AI-сервер</td><td>Cloudflare Workers + Hono</td><td class="num">latest</td><td><span class="chip acc">этап 13</span> бесплатный тариф</td></tr>
+      <tr><td>AI-модель</td><td>Anthropic API: Sonnet для анализа и чата, Haiku для подсказок</td><td>—</td><td>заменяемо, см. раздел 19</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Что мы сознательно НЕ берём</h3>
+  <div class="wide"><table>
+    <thead><tr><th>Библиотека</th><th>Почему нет</th></tr></thead>
+    <tbody>
+      <tr><td>Victory Native XL / <code>@shopify/react-native-skia</code></td><td>Требует нативной сборки — не запустится в Expo Go. Красиво, но на этапе 9 нам это не нужно.</td></tr>
+      <tr><td>Redux / Redux Toolkit</td><td>Источник правды — SQLite, а не память. Глобального состояния в приложении почти нет.</td></tr>
+      <tr><td>Drizzle / TypeORM / WatermelonDB</td><td>Добавляют слой абстракции и свои миграции поверх наших. Для одного разработчика чистый SQL прозрачнее и легче отлаживается. При желании Drizzle можно надеть поверх той же схемы позже.</td></tr>
+      <tr><td>React Query / SWR</td><td>Это библиотеки для работы с сетью. У нас локальная база; кеширование решается на уровне repositories.</td></tr>
+      <tr><td>NativeWind / Tailwind</td><td>Ещё один билд-шаг и источник несовместимостей. Своя дизайн-система на <code>StyleSheet</code> + токены даст полный контроль над iOS-ощущением.</td></tr>
+      <tr><td>UI-киты (Paper, UI Kitten, Tamagui)</td><td>Они тянут за собой чужой визуальный язык. Раздел 42 требует «не как дешёвый admin dashboard» — значит компоненты пишем сами, их немного.</td></tr>
+      <tr><td><code>@shopify/flash-list</code></td><td>Пока не нужен: <code>FlatList</code> с <code>keyExtractor</code> и пагинацией держит каталог. Вернёмся, если на реальном списке будут лаги.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s3">
+  <div class="sec-head"><span class="sec-num">03</span><h2 class="sec-title">Почему выбран именно этот стек</h2></div>
+  <h3>Expo + Expo Go — потому что у вас Windows</h3>
+  <p>Это ключевое ограничение всего проекта. Чистый React Native CLI потребовал бы Xcode и, значит, Mac.
+     Expo Go — готовое приложение из App Store, которое загружает ваш JavaScript по QR-коду.
+     Компьютер отдаёт код, iPhone его выполняет. Xcode не нужен вообще до этапа 20.</p>
+  <h3>expo-router вместо React Navigation напрямую</h3>
+  <p>Файл <code>app/(tabs)/index.tsx</code> = экран. Не нужно вручную описывать навигаторы и передавать параметры
+     через типы — путь и есть API. Для новичка это на порядок меньше кода, который можно сломать.
+     Внутри это всё равно React Navigation, так что потолка возможностей мы не касаемся.</p>
+  <h3>SQLite, а не AsyncStorage / файлы / облако</h3>
+  <p>Приоритет №1 из вашего списка — «надёжность сохранения тренировок». SQLite даёт транзакции
+     (подход либо записан целиком, либо не записан), индексы (история за годы не начнёт тормозить),
+     агрегаты прямо в запросе (объём за неделю считает база, а не JS) и FTS5 для поиска по каталогу.
+     AsyncStorage — это key-value помойка, на ней вся статистика из раздела 21 писалась бы вручную и медленно.</p>
+  <h3>Чистый SQL + repositories, а не ORM</h3>
+  <p>Правило из раздела 43 — «никаких SQL-запросов внутри экранов» — выполняется не наличием ORM,
+     а наличием слоя repositories. Каждый файл вида <code>WorkoutRepository.ts</code> — это единственное место,
+     где живёт SQL для своей таблицы. Экран вызывает <code>workoutRepo.getLastPerformance(exerciseId)</code>
+     и ничего не знает про таблицы. Плюс: когда что-то работает медленно, вы видите ровно тот запрос, который выполняется.</p>
+  <h3>Zustand, а не Context, для активной тренировки</h3>
+  <p>Здесь важна причина, а не мода. Активная тренировка — это объект, который меняется при каждом нажатии
+     на «+2.5 кг». Если положить его в React Context, перерисовываться будет всё поддерево, включая таблицы
+     всех остальных упражнений. Zustand позволяет компоненту подписаться ровно на один подход
+     (<code>useWorkoutStore(s =&gt; s.sets[setId])</code>), и остальной экран не перерисовывается.
+     Это прямо влияет на приоритет №2 — скорость UX в зале. Context мы всё же используем, но только для того,
+     что меняется редко: тема, соединение с БД, настройки.</p>
+  <h3>gifted-charts, а не Skia</h3>
+  <p>Графики нужны на этапе 9, а Expo Go мы хотим сохранить как можно дольше.
+     gifted-charts рисует через <code>react-native-svg</code>, который входит в Expo Go.
+     Для 50–200 точек на графике прогресса разницы в производительности вы не заметите.</p>
+  <div class="callout"><span class="k">Принцип отбора</span>
+    <p>Библиотека попадает в проект, только если: (1) она совместима с Expo Go, либо мы осознанно принимаем
+       переход на dev build ради неё; (2) она заменяет минимум 200 строк нашего кода; (3) она живая.
+       Всё остальное пишем сами — компонентов в приложении меньше, чем кажется.</p></div>
+</section>
+
+<section id="s4">
+  <div class="sec-head"><span class="sec-num">04</span><h2 class="sec-title">Архитектурная схема приложения</h2></div>
+  <p>Пять слоёв. Правило одно и оно жёсткое: <b>слой обращается только к слою ниже</b>.
+     Экран никогда не видит SQL, репозиторий никогда не знает про React.</p>
+  <div class="wide"><pre class="mermaid">
+flowchart TB
+  subgraph L1["UI · app/ + features/"]
+    S1["Экраны: Главная, Каталог,<br/>Активная тренировка, Прогресс"]
+    S2["Компоненты: SetRow, RestTimer,<br/>ExerciseCard, Chart"]
+  end
+  subgraph L2["Hooks + Stores"]
+    H1["useActiveWorkout · useExerciseSearch<br/>useSettings · useRestTimer"]
+  end
+  subgraph L3["Services · бизнес-логика"]
+    SV["WorkoutService · TemplateService<br/>CatalogService · ProgressService<br/>MediaService · BackupService"]
+  end
+  subgraph L4["Analytics · чистые функции"]
+    AN["volume · e1RM · PR detection<br/>plateau · frequency · comparison"]
+  end
+  subgraph L5["Repositories"]
+    R["ExerciseRepo · WorkoutRepo · SetRepo<br/>PRRepo · BodyWeightRepo · SettingsRepo"]
+  end
+  DB[("SQLite<br/>gymlog.db")]
+  S1 --&gt; H1
+  S2 --&gt; H1
+  H1 --&gt; SV
+  SV --&gt; AN
+  SV --&gt; R
+  R --&gt; DB
+  AN -.-&gt; |"только вход/выход,<br/>без доступа к БД"| AN
+  </pre></div>
+  <div class="wide"><table>
+    <thead><tr><th>Слой</th><th>Отвечает за</th><th>Не имеет права</th></tr></thead>
+    <tbody>
+      <tr><td>UI</td><td>Отрисовка, ввод, анимации, навигация</td><td>Считать объём, знать про таблицы, вызывать AI напрямую</td></tr>
+      <tr><td>Hooks / Stores</td><td>Связать React с сервисами, локальное состояние экрана</td><td>Содержать бизнес-правила</td></tr>
+      <tr><td>Services</td><td>Сценарии: «завершить тренировку», «создать шаблон», «найти замену»</td><td>Знать про React, писать SQL напрямую</td></tr>
+      <tr><td>Analytics</td><td>Чистая математика: объём, 1RM, PR, тренды</td><td>Обращаться к БД, к сети, к дате «сейчас» без параметра</td></tr>
+      <tr><td>Repositories</td><td>SQL, маппинг строк в типы, транзакции</td><td>Принимать решения (что считать PR и т.п.)</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Пример: что происходит при нажатии «Завершить тренировку»</h3>
+  <div class="wide"><pre><i>// UI</i>
+onPress → <b>useActiveWorkout().finish()</b>
+   ↓
+<i>// Service — сценарий целиком, в одной транзакции</i>
+<b>WorkoutService.finishSession(sessionId)</b>
+   ├─ WorkoutRepo.loadSessionWithSets(sessionId)        <i>// читаем из БД</i>
+   ├─ analytics.calculateSessionTotals(sets)            <i>// чистая функция</i>
+   ├─ PRRepo.getBestValues(exerciseIds)                 <i>// прошлые рекорды</i>
+   ├─ analytics.detectPersonalRecords(sets, bestValues) <i>// чистая функция</i>
+   ├─ WorkoutRepo.markFinished(totals)      ┐
+   ├─ PRRepo.insertMany(newRecords)         ├ одна транзакция
+   └─ StatCacheRepo.refresh(exerciseIds)    ┘
+   ↓
+<i>// UI</i>
+router.replace(`/workout/summary/${sessionId}`)
+   ↓
+<i>// AI — отдельно, асинхронно, необязательно</i>
+AIAnalysisService.requestSummary(sessionId)  <i>// нет сети → экран просто без AI-блока</i></pre></div>
+</section>
+
+<section id="s5">
+  <div class="sec-head"><span class="sec-num">05</span><h2 class="sec-title">Два потока данных: обычный и AI</h2></div>
+  <h3>Поток 1 — обычный (работает всегда, без интернета)</h3>
+  <div class="wide"><pre class="mermaid">
+flowchart LR
+  UI["UI<br/>экран"] --&gt; SRV["Services<br/>сценарии"]
+  SRV --&gt; ANL["Analytics<br/>чистые расчёты"]
+  SRV --&gt; REPO["Repositories<br/>SQL"]
+  REPO --&gt; SQL[("SQLite<br/>на iPhone")]
+  ANL --&gt; SRV
+  SQL --&gt; REPO
+  REPO --&gt; SRV
+  SRV --&gt; UI
+  </pre></div>
+  <h3>Поток 2 — AI (требует сети, но никогда не блокирует поток 1)</h3>
+  <div class="wide"><pre class="mermaid">
+flowchart TB
+  UI2["UI<br/>AI-чат / AI-разбор / подсказка"] --&gt; AIS["AIService<br/>единая точка входа"]
+  AIS --&gt; CTX["AIContextService<br/>собирает компактный контекст:<br/>уже посчитанные числа + AI Memory"]
+  AIS --&gt; TOOLS["AIToolService<br/>исполняет инструменты<br/>ЛОКАЛЬНО, на телефоне"]
+  CTX --&gt; ANL2["Analytics"]
+  TOOLS --&gt; ANL2
+  ANL2 --&gt; REPO2["Repositories"]
+  REPO2 --&gt; SQL2[("SQLite<br/>на iPhone")]
+  AIS --&gt; PROV["AIProvider<br/>интерфейс, HTTPS"]
+  PROV --&gt; PROXY["Наш прокси<br/>Cloudflare Worker<br/>хранит API-ключ"]
+  PROXY --&gt; LLM["AI-провайдер<br/>Anthropic API"]
+  LLM --&gt; PROXY
+  PROXY --&gt; PROV
+  PROV --&gt; AIS
+  AIS --&gt; UI2
+  </pre></div>
+  <div class="callout ok"><span class="k">Ключевое архитектурное решение</span>
+    <p><b>Инструменты выполняются на телефоне, а не на сервере.</b> Модель говорит «мне нужен
+       <code>getExerciseHistory("bench-press", "90d")</code>» → прокси возвращает этот запрос приложению →
+       приложение выполняет SQL <i>локально</i> → отправляет обратно только результат этого запроса.
+       Сервер остаётся тупым ретранслятором и никогда не видит вашу базу.
+       Это даёт и приватность (раздел 56), и простоту: сервер — это один файл на ~100 строк.</p></div>
+  <div class="callout crit"><span class="k">Правило, которое нельзя нарушать</span>
+    <p>Число, которое видит пользователь, всегда приходит из <code>analytics/</code>, а не из языковой модели.
+       Модель получает <code>{"volumeKg": 8940, "prevVolumeKg": 8420, "changePct": 6.2}</code> и её работа —
+       превратить это в человеческий текст. Она физически не должна ничего умножать:
+       в системном промпте это запрещено, а в контекст всегда кладутся готовые значения (раздел 17).</p></div>
+</section>
+
+<section id="s6">
+  <div class="sec-head"><span class="sec-num">06</span><h2 class="sec-title">Полная карта экранов</h2></div>
+  <div class="wide"><table>
+    <thead><tr><th>Раздел</th><th>Экран</th><th>Ключевое содержимое</th><th>Этап</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2"><b>Главная</b></td><td>Дашборд</td><td>Кнопка «Начать тренировку», следующая/последняя тренировка, тренировки и объём за неделю, свежие PR, мини-график, AI-карточка</td><td class="num">2, 9</td></tr>
+      <tr><td>Все PR</td><td>Лента рекордов с фильтром по периоду</td><td class="num">9</td></tr>
+      <tr><td rowspan="5"><b>Тренировки</b></td><td>Список шаблонов</td><td>Папки, избранное, «последнее использованное», быстрый старт без шаблона</td><td class="num">6</td></tr>
+      <tr><td>Шаблон — просмотр</td><td>Упражнения, заметка, «Начать», дублировать, удалить</td><td class="num">6</td></tr>
+      <tr><td>Шаблон — редактор</td><td>Drag &amp; drop, целевые подходы/повторы, время отдыха, суперсеты</td><td class="num">6</td></tr>
+      <tr><td>Папки программ</td><td>Создание, переименование, перенос шаблонов</td><td class="num">6</td></tr>
+      <tr><td>Выбор упражнений</td><td>Модальный поиск с мультивыбором — общий для шаблона и активной тренировки</td><td class="num">4, 6</td></tr>
+      <tr><td rowspan="4"><b>Каталог</b></td><td>Список упражнений</td><td>Поиск, фильтры, недавние, избранные, «мои упражнения»</td><td class="num">4</td></tr>
+      <tr><td>Карточка упражнения</td><td>Изображения, техника, шаги, ошибки, советы, «Моя статистика», график, история</td><td class="num">5</td></tr>
+      <tr><td>Замены</td><td>Алгоритмический список аналогов + объяснение AI</td><td class="num">11, 16</td></tr>
+      <tr><td>Своё упражнение</td><td>Создание и редактирование пользовательского упражнения</td><td class="num">4</td></tr>
+      <tr><td rowspan="4"><b>Активная тренировка</b><br><span class="chip acc">модально, поверх всего</span></td><td>Чек-ин перед началом</td><td>Самочувствие, сон, энергия, мотивация, заметка — всё необязательно</td><td class="num">10</td></tr>
+      <tr><td>Экран тренировки</td><td>Таблица подходов, «Прошлый раз», RIR/RPE, таймер, заметки, добавить/заменить упражнение</td><td class="num">7</td></tr>
+      <tr><td>Итоги тренировки</td><td>Длительность, упражнения, подходы, объём, PR, AI-разбор</td><td class="num">7, 14</td></tr>
+      <tr><td>Мини-бар</td><td>Липкая полоска над табами: идёт тренировка, таймер, «вернуться»</td><td class="num">11</td></tr>
+      <tr><td rowspan="5"><b>Прогресс</b><br><span class="chip">3 сегмента</span></td><td>История</td><td>Список тренировок по датам, группировка по месяцам, пагинация</td><td class="num">8</td></tr>
+      <tr><td>Тренировка из истории</td><td>Read-only просмотр; редактирование — только через явное «Разрешить правку»</td><td class="num">8</td></tr>
+      <tr><td>Прогресс по упражнению</td><td>8 метрик из раздела 21, графики, история PR</td><td class="num">9</td></tr>
+      <tr><td>Вес тела</td><td>График, список записей, добавление</td><td class="num">9</td></tr>
+      <tr><td>Календарь</td><td>Тепловая карта тренировок по месяцам</td><td class="num">11</td></tr>
+      <tr><td rowspan="2"><b>AI Тренер</b></td><td>Список бесед</td><td>Общий чат + беседы, привязанные к упражнению или тренировке</td><td class="num">15</td></tr>
+      <tr><td>Чат</td><td>Сообщения, индикатор «читаю твою историю…», источники данных</td><td class="num">15</td></tr>
+      <tr><td rowspan="7"><b>Настройки</b><br><span class="chip">через шестерёнку на Главной</span></td><td>Общие</td><td>Единицы (кг/фунты), шаг веса, первый день недели</td><td class="num">3</td></tr>
+      <tr><td>Тренировка</td><td>RIR/RPE вкл-выкл и что именно, авто-таймер, время отдыха по умолчанию</td><td class="num">10</td></tr>
+      <tr><td>Внешний вид</td><td>Светлая / тёмная / системная тема</td><td class="num">2</td></tr>
+      <tr><td>AI</td><td>Вкл-выкл, подсказки во время тренировки, автоанализ после тренировки</td><td class="num">14</td></tr>
+      <tr><td>AI → Память</td><td>Просмотр, правка, удаление сохранённых фактов</td><td class="num">17</td></tr>
+      <tr><td>Данные</td><td>Экспорт JSON/CSV, импорт, очистка AI-истории, удаление базы</td><td class="num">18</td></tr>
+      <tr><td>О приложении</td><td>Версия, лицензии и атрибуция медиа</td><td class="num">5</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s7">
+  <div class="sec-head"><span class="sec-num">07</span><h2 class="sec-title">Схема навигации</h2></div>
+  <div class="callout"><span class="k">Изменение вашего плана</span>
+    <p>Вы предложили 7 вкладок. На iPhone это перебор: iOS показывает максимум 5, остальное сворачивается
+       в уродливое «More». Предлагаю <b>5 вкладок</b>: «История» и «Вес тела» переезжают внутрь «Прогресса»
+       как сегменты (это одна и та же тема — «мои данные»), а «Настройки» становятся иконкой-шестерёнкой
+       в правом верхнем углу Главной. В настройки ходят раз в месяц — им не нужна вкладка.</p></div>
+  <div class="wide"><pre class="mermaid">
+flowchart TB
+  ROOT["Root Stack"] --&gt; TABS["Tab Bar · 5 вкладок"]
+  ROOT --&gt; MODAL["Модальные экраны<br/>поверх вкладок"]
+
+  TABS --&gt; T1["🏠 Главная"]
+  TABS --&gt; T2["📋 Тренировки"]
+  TABS --&gt; T3["🔍 Каталог"]
+  TABS --&gt; T4["📈 Прогресс"]
+  TABS --&gt; T5["🤖 AI Тренер"]
+
+  T1 --&gt; T1a["Все PR"]
+  T1 --&gt; SET["⚙️ Настройки (stack)"]
+  T2 --&gt; T2a["Шаблон"] --&gt; T2b["Редактор шаблона"]
+  T3 --&gt; T3a["Карточка упражнения"] --&gt; T3b["История · Замены"]
+  T4 --&gt; T4a["Сегменты:<br/>История | Прогресс | Тело"]
+  T4a --&gt; T4b["Тренировка из истории"]
+  T4a --&gt; T4c["Прогресс упражнения"]
+  T5 --&gt; T5a["Чат"]
+
+  MODAL --&gt; M1["Активная тренировка<br/>fullScreenModal"]
+  MODAL --&gt; M2["Выбор упражнений"]
+  MODAL --&gt; M3["Итоги тренировки"]
+  MODAL --&gt; M4["Чек-ин самочувствия<br/>sheet"]
+  </pre></div>
+  <h3>Дерево маршрутов expo-router</h3>
+  <div class="wide"><pre><b>app/</b>
+├─ _layout.tsx                      <i>// Root Stack + провайдеры (БД, тема, настройки)</i>
+├─ +not-found.tsx
+├─ <b>(tabs)/</b>
+│  ├─ _layout.tsx                   <i>// Tabs + мини-бар активной тренировки</i>
+│  ├─ index.tsx                     <i>// Главная</i>
+│  ├─ workouts.tsx                  <i>// Тренировки</i>
+│  ├─ exercises.tsx                 <i>// Каталог</i>
+│  ├─ progress.tsx                  <i>// Прогресс (сегменты)</i>
+│  └─ coach.tsx                     <i>// AI Тренер</i>
+├─ <b>workout/</b>
+│  ├─ active.tsx                    <i>// presentation: fullScreenModal, gestureEnabled: false</i>
+│  ├─ checkin.tsx                   <i>// presentation: formSheet</i>
+│  └─ summary/[sessionId].tsx
+├─ <b>template/</b>
+│  ├─ new.tsx
+│  ├─ [id]/index.tsx
+│  └─ [id]/edit.tsx
+├─ <b>exercise/</b>
+│  ├─ new.tsx
+│  ├─ picker.tsx                    <i>// modal, мультивыбор, ?target=template|session</i>
+│  ├─ [id]/index.tsx
+│  ├─ [id]/history.tsx
+│  └─ [id]/substitutes.tsx
+├─ <b>history/</b>
+│  └─ [sessionId].tsx
+├─ <b>progress/</b>
+│  └─ exercise/[id].tsx
+├─ <b>bodyweight/</b>
+│  ├─ index.tsx
+│  └─ new.tsx
+├─ <b>coach/</b>
+│  └─ chat/[chatId].tsx
+└─ <b>settings/</b>
+   ├─ index.tsx
+   ├─ workout.tsx
+   ├─ units.tsx
+   ├─ appearance.tsx
+   ├─ ai.tsx
+   ├─ ai-memory.tsx
+   ├─ data.tsx
+   └─ about.tsx</pre></div>
+  <div class="callout warn"><span class="k">Важная деталь UX</span>
+    <p>Активная тренировка — <b>fullScreenModal со свайпом-закрытием отключённым</b>. Случайный свайп вниз
+       посреди подхода не должен выкидывать вас из тренировки. Выйти можно только через явную кнопку
+       «Свернуть» (тренировка продолжается, появляется мини-бар) или «Завершить».</p></div>
+</section>
+
+<section id="s8">
+  <div class="sec-head"><span class="sec-num">08</span><h2 class="sec-title">Структура папок</h2></div>
+  <p>Правило: <code>app/</code> содержит только маршрутизацию — файл экрана на 10–30 строк, который импортирует
+     настоящий экран из <code>src/features/</code>. Так навигация не смешивается с логикой, и любой экран
+     можно переставить в другое место за минуту.</p>
+  <div class="wide"><pre>gymlog/
+├─ <b>app/</b>                       <i>// только маршруты expo-router (см. раздел 7)</i>
+├─ <b>src/</b>
+│  ├─ <b>db/</b>
+│  │  ├─ client.ts               <i>// открытие БД, PRAGMA, singleton</i>
+│  │  ├─ provider.tsx            <i>// SQLiteProvider + onInit</i>
+│  │  ├─ migrations/
+│  │  │  ├─ index.ts             <i>// раннер: user_version → применить по порядку</i>
+│  │  │  ├─ 001_initial.ts
+│  │  │  ├─ 002_fts.ts
+│  │  │  └─ 003_ai.ts
+│  │  ├─ seed/
+│  │  │  ├─ CatalogSeeder.ts     <i>// импорт JSON → SQLite, чанками</i>
+│  │  │  └─ catalogVersion.ts
+│  │  └─ sql/                    <i>// длинные запросы отдельными файлами-константами</i>
+│  ├─ <b>repositories/</b>          <i>// ЕДИНСТВЕННОЕ место, где есть SQL</i>
+│  │  ├─ ExerciseRepository.ts
+│  │  ├─ ExerciseMediaRepository.ts
+│  │  ├─ TemplateRepository.ts
+│  │  ├─ WorkoutRepository.ts
+│  │  ├─ SetRepository.ts
+│  │  ├─ PersonalRecordRepository.ts
+│  │  ├─ BodyWeightRepository.ts
+│  │  ├─ RecoveryRepository.ts
+│  │  ├─ SettingsRepository.ts
+│  │  ├─ MediaCacheRepository.ts
+│  │  └─ ai/ (ChatRepository.ts, MemoryRepository.ts)
+│  ├─ <b>services/</b>              <i>// сценарии, оркестрация</i>
+│  │  ├─ WorkoutService.ts
+│  │  ├─ TemplateService.ts
+│  │  ├─ CatalogService.ts
+│  │  ├─ SearchService.ts
+│  │  ├─ ProgressService.ts
+│  │  ├─ SubstitutionService.ts
+│  │  ├─ RestTimerService.ts
+│  │  ├─ media/ (ImageCacheService.ts, ExerciseMediaService.ts)
+│  │  └─ BackupService.ts
+│  ├─ <b>analytics/</b>             <i>// чистые функции, 100% покрыты тестами</i>
+│  │  ├─ volume.ts
+│  │  ├─ oneRepMax.ts
+│  │  ├─ personalRecords.ts
+│  │  ├─ progression.ts
+│  │  ├─ frequency.ts
+│  │  ├─ muscleVolume.ts
+│  │  ├─ plateau.ts
+│  │  ├─ comparison.ts
+│  │  └─ __tests__/
+│  ├─ <b>ai/</b>
+│  │  ├─ AIService.ts            <i>// вход для UI</i>
+│  │  ├─ provider/
+│  │  │  ├─ AIProvider.ts        <i>// интерфейс — от него зависит всё остальное</i>
+│  │  │  └─ ProxyProvider.ts     <i>// реализация: наш Cloudflare Worker</i>
+│  │  ├─ context/
+│  │  │  ├─ WorkoutAnalysisContext.ts
+│  │  │  └─ ContextBudget.ts     <i>// обрезка до лимита</i>
+│  │  ├─ tools/
+│  │  │  ├─ definitions.ts       <i>// JSON-схемы инструментов</i>
+│  │  │  ├─ handlers.ts          <i>// исполнение через services/analytics</i>
+│  │  │  └─ AIToolService.ts
+│  │  ├─ prompts/                <i>// системные промпты, версионируются</i>
+│  │  ├─ AIChatService.ts
+│  │  ├─ AIAnalysisService.ts
+│  │  └─ AIMemoryService.ts
+│  ├─ <b>features/</b>              <i>// экраны + их локальные компоненты</i>
+│  │  ├─ home/    (screens/, components/, hooks/)
+│  │  ├─ catalog/
+│  │  ├─ templates/
+│  │  ├─ active-workout/
+│  │  ├─ history/
+│  │  ├─ progress/
+│  │  ├─ bodyweight/
+│  │  ├─ coach/
+│  │  └─ settings/
+│  ├─ <b>components/ui/</b>         <i>// дизайн-система: Button, Card, Sheet, NumberField…</i>
+│  ├─ <b>stores/</b>                <i>// zustand: activeWorkout, restTimer, settings</i>
+│  ├─ <b>hooks/</b>                 <i>// общие: useTheme, useDebounce, useAppState</i>
+│  ├─ <b>theme/</b>                 <i>// tokens.ts, colors.ts, typography.ts, spacing.ts</i>
+│  ├─ <b>types/</b>                 <i>// доменные типы + типы строк БД</i>
+│  ├─ <b>utils/</b>                 <i>// date.ts, units.ts, format.ts, id.ts, result.ts</i>
+│  └─ <b>constants/</b>             <i>// enum'ы: MetricType, SetType, MuscleGroup…</i>
+├─ <b>assets/</b>
+│  ├─ catalog/                   <i>// exercises.part-01.json … (данные каталога)</i>
+│  ├─ images/exercises/          <i>// только встроенные топ-изображения</i>
+│  └─ fonts/, icons/
+├─ <b>server/</b>                   <i>// AI-прокси, деплоится отдельно (этап 13)</i>
+├─ <b>scripts/</b>                  <i>// build-catalog.ts: сборка и валидация JSON каталога</i>
+├─ <b>docs/</b>                     <i>// этот документ, ADR-решения</i>
+├─ app.json / eas.json / tsconfig.json / package.json
+</pre></div>
+  <div class="callout"><span class="k">Почему features/, а не components/screens/</span>
+    <p>При росте проекта «по типам файлов» вы будете держать открытыми 6 вкладок в разных папках,
+       чтобы поправить одну кнопку. При группировке «по функции» всё, что относится к активной тренировке,
+       лежит в одной папке. Общее — только то, что реально переиспользуется в двух и более фичах.</p></div>
+</section>
+
+<section id="s9">
+  <div class="sec-head"><span class="sec-num">09</span><h2 class="sec-title">Структура базы данных SQLite</h2></div>
+  <p>Одна база <code>gymlog.db</code>, внутри — три логические зоны. Разделение важно, потому что
+     у них разный жизненный цикл.</p>
+  <div class="cards">
+    <div class="card"><h4>Каталог</h4><p>Заполняется из поставляемого JSON. При обновлении приложения
+      может быть перезалит целиком. Пользователь его не меняет (кроме своих упражнений).</p></div>
+    <div class="card"><h4>Данные пользователя</h4><p>Тренировки, подходы, PR, вес тела, настройки.
+      <b>Не трогается никогда</b>, кроме миграций. Это то, что мы обязаны не потерять.</p></div>
+    <div class="card"><h4>Служебное</h4><p>Кеш медиа, кеш статистики, AI-переписка.
+      Полностью восстановимо — можно удалить и пересобрать.</p></div>
+  </div>
+  <h3>Глобальные соглашения</h3>
+  <div class="wide"><table>
+    <thead><tr><th>Соглашение</th><th>Как</th><th>Зачем</th></tr></thead>
+    <tbody>
+      <tr><td>Первичные ключи</td><td><code>TEXT</code> UUID v4 (<code>expo-crypto</code>)</td><td>Автоинкремент ломает будущий импорт бэкапа и синхронизацию между устройствами</td></tr>
+      <tr><td>Время</td><td><code>INTEGER</code> — миллисекунды UTC</td><td>Сортировка и арифметика без парсинга</td></tr>
+      <tr><td>Локальная дата</td><td>дополнительно <code>TEXT 'YYYY-MM-DD'</code></td><td>Группировка «по дням» не должна ехать из-за часового пояса</td></tr>
+      <tr><td>Вес</td><td><b>всегда в килограммах</b>, <code>REAL</code></td><td>Фунты — только представление. Смешанные единицы в базе = навсегда сломанная статистика</td></tr>
+      <tr><td>Удаление</td><td><code>deleted_at INTEGER NULL</code> (мягкое)</td><td>Случайное удаление обратимо; нужно для будущей синхронизации</td></tr>
+      <tr><td>Аудит</td><td><code>created_at</code>, <code>updated_at</code> в каждой пользовательской таблице</td><td>Инкрементальный экспорт и разрешение конфликтов позже</td></tr>
+      <tr><td>Перечисления</td><td><code>TEXT</code> + <code>CHECK (...)</code></td><td>Читаемо в дампе и защищено от опечаток на уровне БД</td></tr>
+      <tr><td>Целостность</td><td><code>PRAGMA foreign_keys=ON</code>, <code>journal_mode=WAL</code></td><td>Чужих ссылок не будет; WAL — быстрее и надёжнее при внезапном закрытии</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Система миграций</h3>
+  <p>Никакого «удалите приложение и поставьте заново». Версия схемы живёт в <code>PRAGMA user_version</code>,
+     миграции — пронумерованный массив функций, применяются по порядку в транзакции.</p>
+  <div class="wide"><div class="code-label">src/db/migrations/index.ts — принцип</div><pre>export const migrations: Migration[] = [
+  { version: 1, up: async (db) =&gt; { <i>/* CREATE TABLE … */</i> } },
+  { version: 2, up: async (db) =&gt; { <i>/* CREATE VIRTUAL TABLE exercise_fts … */</i> } },
+  { version: 3, up: async (db) =&gt; { <i>/* ALTER TABLE workout_set ADD COLUMN rpe REAL */</i> } },
+];
+
+export async function migrate(db: SQLiteDatabase) {
+  const { user_version: current } = await db.getFirstAsync&lt;{ user_version: number }&gt;(
+    'PRAGMA user_version'
+  );
+  for (const m of migrations.filter(m =&gt; m.version &gt; current)) {
+    await db.withExclusiveTransactionAsync(async (tx) =&gt; {
+      await m.up(tx);
+      await tx.execAsync(`PRAGMA user_version = ${m.version}`);
+    });
+  }
+}</pre></div>
+  <div class="callout crit"><span class="k">Правило миграций</span>
+    <p>Файл миграции, который хоть раз уехал на телефон, <b>больше никогда не редактируется</b>.
+       Ошибку исправляет только новая миграция с новым номером. Иначе у вас и у будущего вас
+       будут разные базы при одинаковом <code>user_version</code>.</p></div>
+</section>
+
+<section id="s10">
+  <div class="sec-head"><span class="sec-num">10</span><h2 class="sec-title">Основные таблицы и связи</h2></div>
+  <div class="wide"><pre class="mermaid">
+erDiagram
+  EXERCISE ||--o{ EXERCISE_ALIAS : "синонимы"
+  EXERCISE ||--o{ EXERCISE_MUSCLE : "мышцы"
+  EXERCISE ||--o{ EXERCISE_EQUIPMENT : "оборудование"
+  EXERCISE ||--o{ EXERCISE_INSTRUCTION : "техника"
+  EXERCISE ||--o{ EXERCISE_MEDIA : "медиа"
+  EXERCISE_FAMILY ||--o{ EXERCISE : "семейство"
+  MUSCLE_GROUP ||--o{ MUSCLE : ""
+  MUSCLE ||--o{ EXERCISE_MUSCLE : ""
+  EQUIPMENT ||--o{ EXERCISE_EQUIPMENT : ""
+
+  TEMPLATE_FOLDER ||--o{ WORKOUT_TEMPLATE : ""
+  WORKOUT_TEMPLATE ||--o{ TEMPLATE_EXERCISE : ""
+  EXERCISE ||--o{ TEMPLATE_EXERCISE : ""
+
+  WORKOUT_TEMPLATE |o--o{ WORKOUT_SESSION : "снимок названия"
+  WORKOUT_SESSION ||--o{ WORKOUT_EXERCISE : ""
+  WORKOUT_EXERCISE ||--o{ WORKOUT_SET : ""
+  EXERCISE |o--o{ WORKOUT_EXERCISE : "ссылка + снимок"
+  WORKOUT_SET ||--o| PERSONAL_RECORD : "рекорд"
+  WORKOUT_SESSION ||--o| RECOVERY_CHECKIN : ""
+  </pre></div>
+
+  <h3>Каталог</h3>
+  <div class="wide"><div class="code-label">миграция 001 — фрагмент</div><pre>CREATE TABLE exercise (
+  id                TEXT PRIMARY KEY,
+  slug              TEXT NOT NULL UNIQUE,
+  name_ru           TEXT NOT NULL,
+  name_en           TEXT,
+  family_id         TEXT REFERENCES exercise_family(id),
+  category          TEXT NOT NULL,     <i>-- bodybuilding | powerlifting | weightlifting | calisthenics | cardio | mobility | …</i>
+  movement_pattern  TEXT,              <i>-- horizontal_push | vertical_pull | squat | hinge | lunge | carry | rotation | isolation</i>
+  <b>metric_type</b>       TEXT NOT NULL,     <i>-- см. таблицу ниже — определяет ВСЮ математику</i>
+  difficulty        TEXT,              <i>-- beginner | intermediate | advanced</i>
+  is_compound       INTEGER NOT NULL DEFAULT 0,
+  push_pull         TEXT,              <i>-- push | pull | static | none</i>
+  laterality        TEXT,              <i>-- bilateral | unilateral | alternating</i>
+  force_type        TEXT,              <i>-- concentric | isometric | eccentric</i>
+  default_rest_sec  INTEGER,
+  thumb_media_id    TEXT REFERENCES exercise_media(id),
+  popularity        INTEGER NOT NULL DEFAULT 0,  <i>-- для сортировки поиска</i>
+  is_custom         INTEGER NOT NULL DEFAULT 0,
+  source            TEXT,              <i>-- 'builtin' | 'user'  (какие строки можно перезаливать)</i>
+  license           TEXT,
+  attribution       TEXT,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  deleted_at        INTEGER
+);
+
+CREATE TABLE exercise_alias (
+  id TEXT PRIMARY KEY, exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, lang TEXT, kind TEXT  <i>-- synonym | abbreviation | slang | translit</i>
+);
+
+CREATE TABLE muscle_group (id TEXT PRIMARY KEY, name_ru TEXT, name_en TEXT, region TEXT);
+CREATE TABLE muscle (id TEXT PRIMARY KEY, group_id TEXT REFERENCES muscle_group(id), name_ru TEXT, name_en TEXT);
+CREATE TABLE exercise_muscle (
+  exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  muscle_id   TEXT NOT NULL REFERENCES muscle(id),
+  role        TEXT NOT NULL,   <i>-- primary | secondary | stabilizer</i>
+  contribution REAL,           <i>-- 0..1, для честного расчёта объёма на мышцу</i>
+  PRIMARY KEY (exercise_id, muscle_id, role)
+);
+
+CREATE TABLE equipment (id TEXT PRIMARY KEY, name_ru TEXT, name_en TEXT, kind TEXT);
+CREATE TABLE exercise_equipment (
+  exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  equipment_id TEXT NOT NULL REFERENCES equipment(id),
+  is_primary INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (exercise_id, equipment_id)
+);
+
+CREATE TABLE exercise_instruction (
+  id TEXT PRIMARY KEY, exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,      <i>-- overview | step | mistake | tip | breathing | setup</i>
+  position INTEGER NOT NULL, text_ru TEXT NOT NULL, text_en TEXT
+);
+
+CREATE TABLE exercise_media (
+  id TEXT PRIMARY KEY, exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,      <i>-- thumbnail | start_position | end_position | image | gif | video</i>
+  position INTEGER NOT NULL DEFAULT 0,
+  local_asset TEXT,        <i>-- путь во встроенных ассетах, если картинка в бандле</i>
+  remote_url  TEXT,        <i>-- иначе — откуда качать</i>
+  width INTEGER, height INTEGER, bytes INTEGER,
+  asset_source TEXT, license TEXT, attribution TEXT
+);
+
+CREATE TABLE exercise_tag (
+  exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  tag TEXT NOT NULL, PRIMARY KEY (exercise_id, tag)
+);</pre></div>
+
+  <h3>Тип измерения — важнее, чем кажется</h3>
+  <p>Именно <code>metric_type</code> решает, какие поля показывать в таблице подходов и как считать объём.
+     Это заложено с самого начала, иначе позже придётся переделывать и UI, и всю аналитику.</p>
+  <div class="wide"><table>
+    <thead><tr><th><code>metric_type</code></th><th>Поля подхода</th><th>Объём подхода</th><th>Пример</th></tr></thead>
+    <tbody>
+      <tr><td><code>weight_reps</code></td><td>вес, повторы</td><td>вес × повторы</td><td>Жим лёжа</td></tr>
+      <tr><td><code>bodyweight_reps</code></td><td>повторы</td><td>вес тела × повторы</td><td>Отжимания</td></tr>
+      <tr><td><code>weighted_bodyweight</code></td><td>доп. вес, повторы</td><td>(вес тела + доп.) × повторы</td><td>Подтягивания с поясом</td></tr>
+      <tr><td><code>assisted_reps</code></td><td>помощь (−кг), повторы</td><td>(вес тела − помощь) × повторы</td><td>Гравитрон</td></tr>
+      <tr><td><code>reps_only</code></td><td>повторы</td><td>не считается</td><td>Гиперэкстензия без веса</td></tr>
+      <tr><td><code>duration</code></td><td>время</td><td>не считается, суммируется время</td><td>Планка</td></tr>
+      <tr><td><code>weight_duration</code></td><td>вес, время</td><td>вес × секунды (отдельная метрика)</td><td>Прогулка фермера</td></tr>
+      <tr><td><code>distance_duration</code></td><td>расстояние, время</td><td>не считается</td><td>Дорожка, гребля</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout warn"><span class="k">Про вес тела в формулах</span>
+    <p>Для <code>bodyweight_*</code> берётся <b>вес тела на дату тренировки</b> из <code>body_weight_entry</code>
+       (ближайшая запись не позже даты), и он <b>записывается в снимок подхода</b>. Иначе, взвесившись через
+       год, вы «задним числом» перепишете весь свой прошлый объём — классический баг таких приложений.</p></div>
+
+  <h3>Данные пользователя</h3>
+  <div class="wide"><pre>CREATE TABLE workout_template (
+  id TEXT PRIMARY KEY, folder_id TEXT REFERENCES template_folder(id) ON DELETE SET NULL,
+  name TEXT NOT NULL, notes TEXT, is_favorite INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0, default_rest_sec INTEGER,
+  last_used_at INTEGER, use_count INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
+);
+
+CREATE TABLE template_exercise (
+  id TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL REFERENCES workout_template(id) ON DELETE CASCADE,
+  exercise_id TEXT NOT NULL REFERENCES exercise(id),
+  position INTEGER NOT NULL,
+  superset_group INTEGER,            <i>-- одинаковый номер = суперсет</i>
+  target_sets INTEGER, target_reps_min INTEGER, target_reps_max INTEGER,
+  target_rir REAL, rest_sec INTEGER, notes TEXT
+);
+
+CREATE TABLE workout_session (
+  id TEXT PRIMARY KEY,
+  template_id TEXT REFERENCES workout_template(id) ON DELETE SET NULL,
+  <b>template_name_snapshot TEXT</b>,      <i>-- название на момент тренировки</i>
+  title TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active','completed','discarded')),
+  started_at INTEGER NOT NULL, finished_at INTEGER, duration_sec INTEGER,
+  local_date TEXT NOT NULL,
+  notes TEXT,
+  <i>-- денормализованные итоги: считаются один раз при завершении</i>
+  total_volume_kg REAL, total_sets INTEGER, total_reps INTEGER,
+  total_exercises INTEGER, pr_count INTEGER,
+  body_weight_kg REAL,                 <i>-- снимок веса тела на дату</i>
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
+);
+
+CREATE TABLE workout_exercise (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES workout_session(id) ON DELETE CASCADE,
+  exercise_id TEXT REFERENCES exercise(id) ON DELETE SET NULL,   <i>-- может стать NULL</i>
+  <b>exercise_name_snapshot TEXT NOT NULL</b>,
+  <b>metric_type_snapshot   TEXT NOT NULL</b>,
+  <b>equipment_snapshot     TEXT</b>,
+  <b>primary_muscle_snapshot TEXT</b>,       <i>-- чтобы объём по мышцам в истории не «поплыл»</i>
+  position INTEGER NOT NULL, superset_group INTEGER,
+  rest_sec INTEGER, notes TEXT,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE workout_set (
+  id TEXT PRIMARY KEY,
+  workout_exercise_id TEXT NOT NULL REFERENCES workout_exercise(id) ON DELETE CASCADE,
+  set_index INTEGER NOT NULL,
+  set_type TEXT NOT NULL DEFAULT 'working'
+           CHECK (set_type IN ('warmup','working','dropset','failure','backoff')),
+  weight_kg REAL, reps INTEGER, duration_sec INTEGER, distance_m REAL,
+  assist_kg REAL, added_weight_kg REAL,
+  rir REAL, rpe REAL,
+  is_completed INTEGER NOT NULL DEFAULT 0,
+  completed_at INTEGER,
+  volume_kg REAL,                 <i>-- посчитано при сохранении, чтобы SUM() был быстрым</i>
+  est_1rm_kg REAL,                <i>-- Epley, посчитано кодом</i>
+  is_pr INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE personal_record (
+  id TEXT PRIMARY KEY,
+  exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,             <i>-- max_weight | est_1rm | rep_max | set_volume | session_volume</i>
+  rep_target INTEGER,             <i>-- для rep_max: рекорд на 1/3/5/8/10/12 повторов</i>
+  value REAL NOT NULL, unit TEXT NOT NULL,
+  previous_value REAL,
+  session_id TEXT REFERENCES workout_session(id) ON DELETE CASCADE,
+  workout_set_id TEXT REFERENCES workout_set(id) ON DELETE CASCADE,
+  achieved_at INTEGER NOT NULL, local_date TEXT NOT NULL
+);
+
+CREATE TABLE body_weight_entry (
+  id TEXT PRIMARY KEY, measured_at INTEGER NOT NULL, local_date TEXT NOT NULL UNIQUE,
+  weight_kg REAL NOT NULL, note TEXT,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
+);
+
+CREATE TABLE recovery_checkin (
+  id TEXT PRIMARY KEY, session_id TEXT REFERENCES workout_session(id) ON DELETE CASCADE,
+  local_date TEXT NOT NULL,
+  mood INTEGER, sleep INTEGER, energy INTEGER, motivation INTEGER,  <i>-- 1..4</i>
+  note TEXT, created_at INTEGER NOT NULL
+);</pre></div>
+
+  <h3>AI и служебные</h3>
+  <div class="wide"><pre>CREATE TABLE ai_chat (
+  id TEXT PRIMARY KEY, title TEXT,
+  scope TEXT NOT NULL,            <i>-- general | exercise | session</i>
+  ref_id TEXT,                    <i>-- exercise_id или session_id</i>
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE TABLE ai_message (
+  id TEXT PRIMARY KEY, chat_id TEXT NOT NULL REFERENCES ai_chat(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant','tool')),
+  content TEXT, tool_name TEXT, tool_payload_json TEXT,
+  status TEXT NOT NULL DEFAULT 'done',   <i>-- pending | done | error</i>
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE ai_memory (
+  id TEXT PRIMARY KEY, text TEXT NOT NULL,
+  category TEXT,                   <i>-- preference | constraint | goal | equipment | injury_note</i>
+  origin TEXT NOT NULL,            <i>-- user | suggested  (предложенное требует подтверждения)</i>
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE TABLE ai_analysis (          <i>-- кеш разбора тренировки, чтобы не платить дважды</i>
+  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES workout_session(id) ON DELETE CASCADE,
+  model TEXT, prompt_version TEXT, context_json TEXT, content TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE catalog_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);   <i>-- catalog_version и т.п.</i>
+CREATE TABLE media_cache (
+  url_hash TEXT PRIMARY KEY, media_id TEXT, remote_url TEXT NOT NULL,
+  local_path TEXT, bytes INTEGER, state TEXT NOT NULL,  <i>-- pending | ready | failed</i>
+  downloaded_at INTEGER, last_used_at INTEGER
+);
+CREATE TABLE exercise_stat_cache (   <i>-- пересчитываемый кеш, можно удалить в любой момент</i>
+  exercise_id TEXT PRIMARY KEY REFERENCES exercise(id) ON DELETE CASCADE,
+  last_session_id TEXT, last_performed_at INTEGER,
+  best_weight_kg REAL, best_est_1rm_kg REAL, best_set_volume_kg REAL,
+  total_sets INTEGER, total_volume_kg REAL, session_count INTEGER,
+  updated_at INTEGER NOT NULL
+);</pre></div>
+
+  <h3>Индексы — сразу, а не «когда затормозит»</h3>
+  <div class="wide"><pre>CREATE INDEX idx_set_by_exercise      ON workout_set(workout_exercise_id, set_index);
+CREATE INDEX idx_wexercise_by_session ON workout_exercise(session_id, position);
+CREATE INDEX idx_wexercise_by_ex      ON workout_exercise(exercise_id);      <i>-- «прошлый раз» и вся история упражнения</i>
+CREATE INDEX idx_session_by_date      ON workout_session(started_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_session_localdate    ON workout_session(local_date);
+CREATE INDEX idx_pr_by_exercise       ON personal_record(exercise_id, kind, achieved_at DESC);
+CREATE INDEX idx_exercise_name_ru     ON exercise(name_ru);
+CREATE INDEX idx_exercise_family      ON exercise(family_id);
+CREATE INDEX idx_alias_name           ON exercise_alias(name);
+CREATE INDEX idx_exmuscle_by_muscle   ON exercise_muscle(muscle_id, role);
+CREATE INDEX idx_bw_date              ON body_weight_entry(local_date DESC);</pre></div>
+  <p>Ключевой запрос всего приложения — «что я делал в этом упражнении в прошлый раз» — благодаря
+     <code>idx_wexercise_by_ex</code> отрабатывает мгновенно даже на истории в несколько лет.</p>
+</section>
+
+<section id="s11">
+  <div class="sec-head"><span class="sec-num">11</span><h2 class="sec-title">Как обеспечивается историческая целостность</h2></div>
+  <p>Четыре механизма, работающих вместе.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Механизм</th><th>Что делает</th><th>Что защищает</th></tr></thead>
+    <tbody>
+      <tr><td><b>Снимки полей</b></td><td>В <code>workout_exercise</code> дублируются имя, тип измерения, оборудование, основная мышца; в <code>workout_session</code> — имя шаблона и вес тела</td><td>Переименовали «Жим штанги» → в истории за март всё равно старое название</td></tr>
+      <tr><td><b>Вычисленные значения на месте</b></td><td><code>volume_kg</code>, <code>est_1rm_kg</code> пишутся в <code>workout_set</code> при сохранении</td><td>Смена формулы 1RM в будущей версии не перепишет прошлое задним числом</td></tr>
+      <tr><td><b>Мягкое удаление + <code>ON DELETE SET NULL</code></b></td><td>Удалённое упражнение исчезает из каталога, но <code>workout_exercise</code> живёт со снимком</td><td>Удаление упражнения не удаляет тренировки, где оно было</td></tr>
+      <tr><td><b>Копия, а не ссылка</b></td><td>Старт тренировки <b>копирует</b> шаблон в сессию, а не ссылается на него</td><td>Правка шаблона в апреле не меняет мартовскую тренировку</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><span class="k">Read-only история</span>
+    <p>Завершённая сессия открывается только для чтения. Кнопка «Разрешить редактирование» показывает
+       предупреждение, и после правки сессия пересчитывается целиком: итоги, PR, кеш статистики.
+       Пересчёт делает <code>WorkoutService.recalculateSession()</code> — одна функция, один путь.
+       PR, ставшие невалидными, удаляются и пересоздаются, а не «правятся».</p></div>
+  <div class="callout warn"><span class="k">Отдельная защита: краш во время тренировки</span>
+    <p>Активная тренировка <b>не живёт в памяти</b>. Каждое изменение подхода немедленно пишется в SQLite
+       (сессия в статусе <code>active</code>), zustand-стор — лишь зеркало для быстрой отрисовки.
+       Если приложение выгрузили из памяти или разрядился телефон, при запуске мы находим сессию
+       со статусом <code>active</code> и предлагаем «Продолжить тренировку». Это прямое требование
+       приоритета №1 — надёжность сохранения.</p></div>
+</section>
+
+<section id="s12">
+  <div class="sec-head"><span class="sec-num">12</span><h2 class="sec-title">Архитектура большого каталога упражнений</h2></div>
+  <p>Данные каталога <b>не живут в TypeScript</b>. Они живут в JSON-файлах в <code>assets/catalog/</code>,
+     нарезанных по ~500 упражнений на файл, и один раз импортируются в SQLite.</p>
+  <div class="wide"><pre class="mermaid">
+flowchart LR
+  SRC["Исходники каталога<br/>data/exercises/*.json<br/>в репозитории"] --&gt; VAL["scripts/build-catalog.ts<br/>валидация схемы (zod),<br/>проверка slug, лицензий,<br/>ссылок на мышцы"]
+  VAL --&gt; PARTS["assets/catalog/<br/>part-01.json … part-NN.json<br/>+ manifest.json (версия, sha)"]
+  PARTS --&gt; SEED["CatalogSeeder<br/>первый запуск или<br/>рост catalog_version"]
+  SEED --&gt; DB[("SQLite<br/>таблицы каталога")]
+  DB --&gt; SRCH["SearchService"]
+  DB --&gt; UI["Каталог, карточка,<br/>выбор упражнений"]
+  </pre></div>
+  <h3>Как работает импорт</h3>
+  <ol>
+    <li>При старте сравниваем <code>manifest.version</code> с <code>catalog_meta.catalog_version</code> в базе.</li>
+    <li>Если версия выросла — импортируем в фоне, чанками по 200 записей, каждый чанк в своей транзакции
+        (иначе на слабом устройстве UI встанет на несколько секунд).</li>
+    <li>Запись выполняется как <code>INSERT … ON CONFLICT(slug) DO UPDATE</code> —
+        <b>только для строк с <code>source = 'builtin'</code></b>. Строки пользователя не трогаются никогда.</li>
+    <li>Упражнения, исчезнувшие из поставки, помечаются <code>deleted_at</code>, но не удаляются —
+        ваша история на них ссылается.</li>
+    <li>В конце — перестроение FTS-индекса и <code>ANALYZE</code>.</li>
+  </ol>
+  <h3>Реалистичный план по объёму каталога</h3>
+  <div class="wide"><table>
+    <thead><tr><th>Шаг</th><th>Объём</th><th>Источник</th></tr></thead>
+    <tbody>
+      <tr><td>Этап 4 (MVP)</td><td>150–300 упражнений</td><td>Пишем сами: всё, чем вы реально пользуетесь, с корректными русскими названиями</td></tr>
+      <tr><td>Этап 4+</td><td>+ 500–900</td><td>Открытые базы упражнений с проверенной лицензией (напр. wger — данные под свободной лицензией; free-exercise-db). <b>Лицензию каждого источника проверяем отдельно и записываем в <code>source</code>/<code>license</code>/<code>attribution</code></b></td></tr>
+      <tr><td>Позже</td><td>тысячи</td><td>Генерация вариаций по шаблону: <i>движение × оборудование × угол × хват</i>, с ручной вычиткой</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><span class="k">Семейства и разделение статистики</span>
+    <p><code>family_id</code> — это только семантическая связь. Жим лёжа, наклонный жим и жим в Смите имеют
+       <code>family_id = 'bench_press'</code>, но <b>их история никогда не смешивается</b>: любая статистика
+       группируется строго по <code>exercise_id</code>. Семейство используется ровно в двух местах:
+       подбор замены (раздел 36 ТЗ) и подсказка AI «это родственные движения» —
+       и AI получает их как <i>отдельные</i> наборы чисел, а не как один.</p></div>
+  <div class="callout warn"><span class="k">Пользовательские упражнения — полноправные</span>
+    <p>Своё упражнение — это обычная строка в <code>exercise</code> с <code>is_custom = 1</code>,
+       <code>source = 'user'</code>. Никаких отдельных таблиц. Поэтому оно автоматически работает в поиске,
+       шаблонах, истории, статистике, PR, графиках и AI — без единой строчки дополнительного кода.
+       Это ключевая причина, почему каталог и «свои упражнения» — одна таблица.</p></div>
+</section>
+
+<section id="s13">
+  <div class="sec-head"><span class="sec-num">13</span><h2 class="sec-title">Как хранить изображения упражнений</h2></div>
+  <p>Трёхуровневая модель. Приложение никогда не зависит от наличия картинки: интерфейс должен быть
+     полностью рабочим и без неё.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Уровень</th><th>Где</th><th>Что там</th><th>Размер</th></tr></thead>
+    <tbody>
+      <tr><td>0 — заглушка</td><td>Код</td><td>SVG-силуэт по мышечной группе + буква/иконка оборудования. Рисуем сами, векторно</td><td class="num">~0</td></tr>
+      <tr><td>1 — встроенные</td><td><code>assets/images/exercises/</code></td><td>Миниатюры топ-100 упражнений, WebP, 256 px</td><td class="num">2–4 МБ</td></tr>
+      <tr><td>2 — по требованию</td><td>Интернет → кеш на устройстве</td><td>Крупные изображения техники: старт / финиш, GIF, видео</td><td class="num">докачивается</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout crit"><span class="k">Лицензии — это не формальность</span>
+    <p>Каждая строка <code>exercise_media</code> обязана иметь <code>asset_source</code>, <code>license</code>
+       и <code>attribution</code>. Скрипт <code>build-catalog.ts</code> <b>падает с ошибкой</b>, если у медиа
+       нет лицензии — это дешёвая техническая мера, которая не даст случайно затащить картинку из Google.
+       В настройках делаем экран «Лицензии и источники», который генерируется из базы.
+       Для этапа 5 честный план: <b>своя векторная графика и заглушки</b>, а фотографии/анимации добавляем
+       позже, когда будет выбран и оплачен легальный источник.</p></div>
+</section>
+
+<section id="s14">
+  <div class="sec-head"><span class="sec-num">14</span><h2 class="sec-title">Offline image cache</h2></div>
+  <p>Два уровня кеша, каждый решает свою задачу.</p>
+  <div class="wide"><pre class="mermaid">
+flowchart TB
+  UI["&lt;ExerciseImage /&gt;"] --&gt; EMS["ExerciseMediaService<br/>какое медиа показать:<br/>bundled → cached → remote → заглушка"]
+  EMS --&gt; MR["MediaRepository<br/>exercise_media + media_cache"]
+  EMS --&gt; ICS["ImageCacheService<br/>prefetch · LRU · бюджет · очистка"]
+  ICS --&gt; EI["expo-image<br/>диск + память, автоматически"]
+  ICS --&gt; FS["expo-file-system<br/>для GIF/видео и явного prefetch"]
+  MR --&gt; DB[("SQLite")]
+  EI --&gt; NET(("Сеть"))
+  FS --&gt; NET
+  </pre></div>
+  <h3>Правила</h3>
+  <ul>
+    <li><b>Миниатюры в списках</b> — <code>expo-image</code> с <code>cachePolicy="memory-disk"</code>.
+        Он сам управляет диском; своего кода почти не нужно.</li>
+    <li><b>Крупные изображения и GIF</b> — качаем через <code>ImageCacheService</code>, путь и размер
+        пишем в <code>media_cache</code>, обновляем <code>last_used_at</code> при показе.</li>
+    <li><b>Бюджет</b> — по умолчанию 300 МБ. При превышении вытесняем по LRU. Значение видно и настраивается
+        в «Настройки → Данные», там же «Очистить кеш изображений» с показом занятого места.</li>
+    <li><b>Умный prefetch</b> — когда телефон в Wi-Fi и приложение открыто, тихо докачиваем медиа
+        для упражнений <i>из ваших шаблонов</i>. К моменту тренировки картинки уже на устройстве.</li>
+    <li><b>Нет сети</b> — показывается заглушка уровня 0. Никаких спиннеров и пустых прямоугольников,
+        никаких ошибок.</li>
+  </ul>
+</section>
+
+<section id="s15">
+  <div class="sec-head"><span class="sec-num">15</span><h2 class="sec-title">Поиск по тысячам упражнений</h2></div>
+  <p>Используем SQLite FTS5 — он включён в <code>expo-sqlite</code> по умолчанию
+     (опция плагина <code>enableFTS</code> = true). Индекс строится как <i>external content</i> таблица
+     над <code>exercise</code>, а синонимы, мышцы, оборудование и теги склеиваются в отдельные колонки индекса.</p>
+  <div class="wide"><div class="code-label">миграция 002 — поисковый индекс</div><pre>CREATE VIRTUAL TABLE exercise_fts USING fts5(
+  name_ru, name_en, aliases, muscles, equipment, tags,
+  content='',                        <i>-- сами храним, чтобы класть склеенные поля</i>
+  tokenize = "unicode61 remove_diacritics 2",
+  prefix = '2 3 4'                   <i>-- поиск начинает работать со 2-й буквы</i>
+);</pre></div>
+  <h3>Как ищем</h3>
+  <div class="wide"><pre><i>// SearchService.search("гантели грудь")</i>
+1. Нормализация запроса
+   trim → lower → ё→е → убрать лишние пробелы → выкинуть стоп-слова
+2. Построение FTS-запроса: каждое слово с префиксом
+   «гантел*  AND  груд*»
+3. Ранжирование: bm25 с весами колонок —
+   имя важнее синонима, синоним важнее тега
+   ORDER BY bm25(exercise_fts, <b>10.0, 8.0, 5.0, 3.0, 3.0, 2.0</b>), popularity DESC
+4. Пусто? → мягкий fallback: LIKE '%…%' по name_ru/name_en/alias
+5. LIMIT 40 + keyset-пагинация при скролле</pre></div>
+  <div class="wide"><table>
+    <thead><tr><th>Запрос</th><th>Что срабатывает</th></tr></thead>
+    <tbody>
+      <tr><td>«бицепс»</td><td>колонка <code>muscles</code> — все упражнения на бицепс</td></tr>
+      <tr><td>«гантели грудь»</td><td>два токена: <code>equipment</code> + <code>muscles</code>, AND-логика</td></tr>
+      <tr><td>«lat pulldown»</td><td><code>name_en</code></td></tr>
+      <tr><td>«тяга спина блок»</td><td><code>name_ru</code> + <code>muscles</code> + <code>equipment</code></td></tr>
+      <tr><td>«жим лёжа» / «жим лежа»</td><td>нормализация ё→е ловит оба варианта</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Производительность в UI</h3>
+  <ul>
+    <li>Debounce ввода 180 мс + отмена предыдущего запроса.</li>
+    <li>Запрос возвращает <b>только</b> <code>id, name_ru, name_en, equipment, primary_muscle, thumb</code> —
+        не всю карточку упражнения.</li>
+    <li>Фильтры (раздел 8 ТЗ) применяются как <code>WHERE</code>-условия к тому же запросу, а не в JavaScript.</li>
+    <li>Пустой поиск = не «все 3000», а секции: «Недавние», «Избранные», «Из ваших шаблонов», «Популярные».</li>
+  </ul>
+  <div class="callout warn"><span class="k">Запасной план</span>
+    <p>FTS5 в Expo Go включён по умолчанию, но проверим фактически на этапе 4 одним запросом при старте.
+       Если по какой-то причине он недоступен, <code>SearchService</code> прозрачно переключается на
+       LIKE-поиск по денормализованной колонке <code>search_blob</code> — интерфейс об этом не узнает.
+       Именно поэтому поиск спрятан за сервисом, а не написан прямо в экране.</p></div>
+</section>
+
+<section id="s16">
+  <div class="sec-head"><span class="sec-num">16</span><h2 class="sec-title">Архитектура analytics layer</h2></div>
+  <p>Самый простой по коду и самый важный по последствиям слой. Правила:
+     <b>чистые функции</b> (одинаковый вход → одинаковый выход), <b>никаких обращений к БД</b>,
+     <b>никакого <code>Date.now()</code> внутри</b> — «сейчас» передаётся параметром, иначе тесты нельзя написать.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Файл</th><th>Функции</th><th>Возвращает</th></tr></thead>
+    <tbody>
+      <tr><td><code>volume.ts</code></td><td><code>calculateSetVolume(set, ctx)</code>, <code>calculateExerciseVolume</code>, <code>calculateSessionVolume</code></td><td>кг; учитывает <code>metric_type</code>; <b>разминочные подходы не считаются</b></td></tr>
+      <tr><td><code>oneRepMax.ts</code></td><td><code>estimateOneRepMax(weightKg, reps)</code></td><td>Epley: <code>w × (1 + reps/30)</code>; для <code>reps = 1</code> → <code>w</code>; для <code>reps &gt; 12</code> помечаем <code>lowConfidence: true</code></td></tr>
+      <tr><td><code>personalRecords.ts</code></td><td><code>detectPersonalRecords(sets, previousBests, ctx)</code></td><td>Массив новых PR пяти видов (см. ниже)</td></tr>
+      <tr><td><code>progression.ts</code></td><td><code>calculateExerciseProgress(history, period)</code></td><td>Точки графиков: max weight, e1RM, объём, повторы, частота</td></tr>
+      <tr><td><code>comparison.ts</code></td><td><code>compareSessions(a, b)</code>, <code>compareExercisePerformance</code></td><td>Дельты в кг и %, «лучше/хуже/так же» по каждому упражнению</td></tr>
+      <tr><td><code>frequency.ts</code></td><td><code>calculateTrainingFrequency(sessions, period)</code></td><td>Тренировок в неделю, средний интервал, дней с последнего раза</td></tr>
+      <tr><td><code>muscleVolume.ts</code></td><td><code>calculateMuscleGroupVolume(sets, mapping, period)</code></td><td>Объём и <b>число рабочих подходов</b> на группу мышц (подходы информативнее объёма)</td></tr>
+      <tr><td><code>plateau.ts</code></td><td><code>detectPlateau(history, options)</code></td><td>Застой: нет роста e1RM и объёма за N сессий / M дней</td></tr>
+      <tr><td><code>trends.ts</code></td><td><code>movingAverage</code>, <code>linearTrend</code>, <code>percentChange</code></td><td>Общая математика для графиков и AI</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Виды рекордов</h3>
+  <div class="wide"><table>
+    <thead><tr><th><code>kind</code></th><th>Определение</th><th>Пример</th></tr></thead>
+    <tbody>
+      <tr><td><code>max_weight</code></td><td>Наибольший вес в рабочем подходе, ≥ 1 повтора</td><td>«Новый максимум: 85 кг»</td></tr>
+      <tr><td><code>rep_max</code></td><td>Лучший вес на конкретное число повторов (1, 3, 5, 8, 10, 12)</td><td>«Лучшая восьмёрка: 82.5 кг»</td></tr>
+      <tr><td><code>est_1rm</code></td><td>Лучший расчётный 1RM по Epley</td><td>«Расчётный максимум: 104.5 кг»</td></tr>
+      <tr><td><code>set_volume</code></td><td>Лучший объём одного подхода</td><td>«660 кг за подход»</td></tr>
+      <tr><td><code>session_volume</code></td><td>Лучший объём упражнения за тренировку</td><td>«1 980 кг за тренировку»</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><span class="k">Правила подсчёта, зафиксированные сейчас</span>
+    <ul>
+      <li>PR считаются <b>только по рабочим подходам</b> (<code>set_type</code> ∈ working, backoff, failure) и только по отмеченным выполненными.</li>
+      <li>PR ищется <b>внутри одного <code>exercise_id</code></b>. Родственные упражнения не смешиваются никогда.</li>
+      <li>Объём округляется до 1 кг при показе, но хранится как есть.</li>
+      <li>Неделя начинается с понедельника (настраивается).</li>
+      <li>«Период» везде — явный объект <code>{ fromMs, toMs }</code>, а не строка «30d» в глубине кода.</li>
+    </ul></div>
+  <div class="callout ok"><span class="k">Тесты — здесь и только здесь обязательны</span>
+    <p>Этот слой чистый, поэтому тестируется тривиально и без эмулятора: подали массив подходов —
+       проверили число. Раздел 53 ТЗ закрывается покрытием <code>analytics/</code> и миграций.
+       Тестировать кнопки в React Native на старте — плохая инвестиция времени.</p></div>
+</section>
+
+<section id="s17">
+  <div class="sec-head"><span class="sec-num">17</span><h2 class="sec-title">Архитектура AI Context</h2></div>
+  <p>Контекст — это <b>маленький JSON с уже посчитанными числами</b>. Он собирается детерминированно
+     и целиком помещается на экран — если вы не можете глазами проверить, что в нём нет выдумок,
+     он слишком большой.</p>
+  <div class="wide"><div class="code-label">пример: контекст для разбора тренировки (~1.5 КБ)</div><pre>{
+  "schema": "workout_analysis.v1",
+  "units": { "weight": "kg", "volume": "kg" },
+  "computedBy": "app",              <i>// напоминание модели: числа уже посчитаны</i>
+  "session": {
+    "date": "2026-08-28", "title": "Грудь + трицепс",
+    "durationMin": 72, "exercises": 7, "workingSets": 22,
+    "volumeKg": 8940, "prCount": 2
+  },
+  "comparedTo": {
+    "date": "2026-08-21", "volumeKg": 8420,
+    "volumeChangePct": 6.2, "durationMin": 68
+  },
+  "exercises": [{
+    "name": "Жим штанги лёжа",
+    "metricType": "weight_reps",
+    "today":    [{ "kg": 82.5, "reps": 8, "rir": 2 },
+                 { "kg": 82.5, "reps": 7, "rir": 1 },
+                 { "kg": 82.5, "reps": 6, "rir": 0 }],
+    "previous": [{ "kg": 80, "reps": 8, "rir": 2 },
+                 { "kg": 80, "reps": 8, "rir": 1 },
+                 { "kg": 80, "reps": 7, "rir": 1 }],
+    "topSetChange": { "weightKg": 2.5, "reps": 0 },
+    "estimated1rmKg": 104.5, "previous1rmKg": 101.3, "change1rmPct": 3.2,
+    "volumeKg": 1732, "previousVolumeKg": 1840,
+    "newRecords": [{ "kind": "rep_max", "repTarget": 8, "valueKg": 82.5 }]
+  }],
+  "recovery": { "mood": 3, "sleep": 2, "energy": 3, "note": null },
+  "recent": { "sessions28d": 11, "avgPerWeek": 2.8, "daysSinceLastLegs": 9 },
+  "memory": ["Тренируюсь 4 раза в неделю", "Не люблю выпады"]
+}</pre></div>
+  <h3>Слой ContextBudget</h3>
+  <ul>
+    <li>Жёсткий лимит ~8 000 символов на контекст. Не влезает — режем по приоритету:
+        сначала упражнения без изменений, потом старые сравнения, потом заметки.</li>
+    <li>История подходов ограничена: не более 3 последних выполнений упражнения, не более 8 подходов каждое.</li>
+    <li>В контекст <b>не попадают</b>: id, внутренние поля, свободные заметки о здоровье,
+        всё, что не нужно для ответа на конкретный вопрос (раздел 56 — приватность).</li>
+    <li>Контекст сохраняется в <code>ai_analysis.context_json</code> — можно ровно посмотреть,
+        на основании чего был сформирован ответ. Это и отладка, и доверие.</li>
+  </ul>
+  <h3>Системный промпт — правила поведения</h3>
+  <div class="wide"><pre>1. Все числа приходят из приложения. НИКОГДА не вычисляй, не оценивай
+   и не округляй самостоятельно. Нет числа в данных — скажи, что данных нет.
+2. Структурируй ответ: <b>Данные → Интерпретация → Рекомендация</b>.
+3. Не смешивай разные упражнения. Жим в Смите — не жим штанги.
+4. Ты не врач. Боль, травма, головокружение, потеря сознания →
+   не ставь диагноз, порекомендуй обратиться к специалисту и не давай нагрузку.
+5. RIR/RPE меняют смысл: 8 повторов с RIR 3 и с RIR 0 — не одно и то же.
+6. Коротко. Русский язык. Без мотивационного шума и без восклицаний через строку.
+7. Не утверждай причинно-следственную связь там, где есть только корреляция.</pre></div>
+</section>
+
+<section id="s18">
+  <div class="sec-head"><span class="sec-num">18</span><h2 class="sec-title">Архитектура AI Tools</h2></div>
+  <p>Инструменты — это способ дать модели <b>читать вашу базу узкими срезами</b>, вместо того чтобы
+     отправлять базу целиком. Каждый инструмент — тонкая обёртка над уже существующим сервисом.
+     Новой логики в них нет: инструмент, который что-то считает сам, — ошибка проектирования.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Инструмент</th><th>Параметры</th><th>Отдаёт</th></tr></thead>
+    <tbody>
+      <tr><td><code>findExercises</code></td><td>query, limit</td><td>id + названия. <b>Вызывается первым</b>: «жим лёжа» → конкретный <code>exercise_id</code></td></tr>
+      <tr><td><code>getTrainingSummary</code></td><td>period</td><td>Тренировок, подходов, объём, длительность, частота</td></tr>
+      <tr><td><code>getRecentSessions</code></td><td>limit, period</td><td>Дата, название, длительность, объём, число PR</td></tr>
+      <tr><td><code>getSessionDetails</code></td><td>sessionId</td><td>Упражнения и подходы одной тренировки</td></tr>
+      <tr><td><code>compareSessions</code></td><td>sessionIdA, sessionIdB</td><td>Готовые дельты по упражнениям и итогам</td></tr>
+      <tr><td><code>getExerciseHistory</code></td><td>exerciseId, period, limit</td><td>Выполнения: дата + подходы + RIR/RPE</td></tr>
+      <tr><td><code>getExerciseProgress</code></td><td>exerciseId, period</td><td>Тренды max weight, e1RM, объёма, частоты + % изменений</td></tr>
+      <tr><td><code>getPersonalRecords</code></td><td>period, exerciseId?</td><td>Рекорды с датами и предыдущими значениями</td></tr>
+      <tr><td><code>getVolumeByMuscleGroup</code></td><td>period</td><td>Объём и рабочие подходы по группам мышц</td></tr>
+      <tr><td><code>getWeeklyVolume</code></td><td>weeks</td><td>Ряд по неделям</td></tr>
+      <tr><td><code>getStalledExercises</code></td><td>period, minSessions</td><td>Где нет прогресса (алгоритм <code>detectPlateau</code>)</td></tr>
+      <tr><td><code>getUntrainedMuscles</code></td><td>period</td><td>Группы мышц без нагрузки + сколько дней</td></tr>
+      <tr><td><code>getBodyWeightTrend</code></td><td>period</td><td>Точки + изменение за период</td></tr>
+      <tr><td><code>getRecoveryCheckins</code></td><td>period</td><td>Самочувствие/сон/энергия с привязкой к тренировкам</td></tr>
+      <tr><td><code>getExerciseReference</code></td><td>exerciseId</td><td>Справка каталога: мышцы, техника, ошибки, советы</td></tr>
+      <tr><td><code>suggestSubstitutes</code></td><td>exerciseId, availableEquipment?</td><td>Список замен, посчитанный <b>алгоритмом</b>, не моделью</td></tr>
+      <tr><td><code>getAIMemory</code></td><td>—</td><td>Активные факты о пользователе</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Цикл выполнения</h3>
+  <div class="wide"><pre class="mermaid">
+sequenceDiagram
+  participant U as Вы
+  participant A as AIService (телефон)
+  participant P as Прокси
+  participant M as Модель
+  U-&gt;&gt;A: «Как идёт жим лёжа?»
+  A-&gt;&gt;P: сообщения + описания инструментов
+  P-&gt;&gt;M: запрос (ключ живёт здесь)
+  M--&gt;&gt;P: вызвать findExercises("жим лёжа")
+  P--&gt;&gt;A: tool_use
+  A-&gt;&gt;A: SQL локально → {id: "bench-press-barbell"}
+  A-&gt;&gt;P: tool_result
+  P-&gt;&gt;M: продолжение
+  M--&gt;&gt;P: вызвать getExerciseProgress(id, "90d")
+  P--&gt;&gt;A: tool_use
+  A-&gt;&gt;A: analytics + SQL локально
+  A-&gt;&gt;P: tool_result (компактный JSON)
+  P-&gt;&gt;M: продолжение
+  M--&gt;&gt;A: текстовый ответ по реальным числам
+  A--&gt;&gt;U: ответ + «источник: 12 тренировок за 90 дней»
+  </pre></div>
+  <h3>Защитные правила</h3>
+  <ul>
+    <li>Максимум <b>5 вызовов инструментов</b> на один вопрос — защита от зацикливания и от счёта за API.</li>
+    <li>Каждый результат ограничен по размеру (обрезаем и помечаем <code>"truncated": true</code>).</li>
+    <li>Инструменты <b>только читают</b>. Ни один не может изменить вашу базу. Планы тренировок AI пока не пишет.</li>
+    <li>Ответ инструмента всегда содержит единицы измерения и период — чтобы модель не «догадывалась».</li>
+    <li>В UI показываем, какие инструменты сработали: видно, что ответ основан на данных, а не на фантазии.</li>
+  </ul>
+</section>
+
+<section id="s19">
+  <div class="sec-head"><span class="sec-num">19</span><h2 class="sec-title">Архитектура безопасного AI API</h2></div>
+  <div class="callout crit"><span class="k">Почему ключ нельзя класть в приложение</span>
+    <p>JavaScript-бандл Expo-приложения скачивается на устройство и легко распаковывается.
+       Любая строка вида <code>sk-ant-…</code> в коде или в <code>app.json</code> — это ключ,
+       выложенный в открытый доступ. Даже <code>EXPO_PUBLIC_*</code> переменные попадают в бандл в открытом виде.
+       Счёт за чужое использование придёт вам.</p></div>
+  <div class="wide"><pre class="mermaid">
+flowchart LR
+  APP["iPhone<br/>GymLog"] --&gt;|HTTPS + X-Device-Token| W["Cloudflare Worker<br/>ai.gymlog.workers.dev"]
+  W --&gt;|ANTHROPIC_API_KEY<br/>из секретов| API["Anthropic API"]
+  API --&gt; W --&gt; APP
+  W --- KV[("KV: лимиты<br/>по токену")]
+  DB[("SQLite<br/>ваша история")] --- APP
+  </pre></div>
+  <h3>Что делает сервер — и чего не делает</h3>
+  <div class="wide"><table>
+    <thead><tr><th>Делает</th><th>Не делает</th></tr></thead>
+    <tbody>
+      <tr><td>Хранит API-ключ в секретах окружения</td><td>Не хранит вашу базу и не имеет к ней доступа</td></tr>
+      <tr><td>Проверяет device token (первый запуск → UUID в <code>expo-secure-store</code>)</td><td>Не хранит логи сообщений</td></tr>
+      <tr><td>Ограничивает частоту и размер запросов</td><td>Не выполняет инструменты — они выполняются на телефоне</td></tr>
+      <tr><td>Задаёт модель, лимит токенов, системный промпт</td><td>Не требует регистрации, аккаунтов, паролей</td></tr>
+      <tr><td>Транслирует ответ обратно (в т.ч. стримингом)</td><td>Не нужен для работы трекера</td></tr>
+    </tbody>
+  </table></div>
+  <div class="wide"><div class="code-label">server/src/index.ts — идея, ~100 строк</div><pre>app.post('/v1/messages', async (c) =&gt; {
+  const token = c.req.header('X-Device-Token');
+  if (!token || !(await isKnownDevice(c.env.KV, token))) return c.json({ error: 'unauthorized' }, 401);
+  if (await isRateLimited(c.env.KV, token))               return c.json({ error: 'rate_limited' }, 429);
+
+  const body = await c.req.json();                <i>// messages + tool_results от телефона</i>
+  if (JSON.stringify(body).length &gt; 60_000)       return c.json({ error: 'payload_too_large' }, 413);
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': c.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
+               'content-type': 'application/json' },
+    body: JSON.stringify({ model: c.env.MODEL, max_tokens: 1200, ...body }),
+  });
+  return new Response(res.body, { status: res.status, headers: { 'content-type': 'application/json' } });
+});</pre></div>
+  <h3>Провайдер заменяем</h3>
+  <p>Приложение зависит не от Anthropic, а от интерфейса:</p>
+  <div class="wide"><pre>export interface AIProvider {
+  complete(req: AIRequest): Promise&lt;AIResponse&gt;;         <i>// поддерживает tool_use</i>
+  stream?(req: AIRequest): AsyncIterable&lt;AIChunk&gt;;
+  readonly id: string;
+  readonly capabilities: { tools: boolean; streaming: boolean; maxContext: number };
+}</pre></div>
+  <p>Смена модели или провайдера = новый файл в <code>ai/provider/</code> и одна строка в конфиге.
+     Ни один экран и ни один инструмент при этом не меняется.</p>
+  <div class="callout"><span class="k">Ориентир по стоимости</span>
+    <p>Один разбор тренировки — единицы центов. Чат с инструментами — дороже за счёт нескольких вызовов.
+       Для одного пользователя это доллары в месяц, но чтобы не было сюрпризов:
+       кешируем разбор в <code>ai_analysis</code> (повторное открытие итогов не платное),
+       ставим лимит в Worker и делаем в настройках выключатель AI целиком.</p></div>
+</section>
+
+<section id="s20">
+  <div class="sec-head"><span class="sec-num">20</span><h2 class="sec-title">Что работает без интернета</h2></div>
+  <p>Всё, кроме AI и ещё не скачанных картинок. Это не «побочный эффект», а следствие того,
+     что источник правды — SQLite на телефоне.</p>
+  <div class="cards">
+    <div class="card"><h4>Тренировка</h4><p>Старт из шаблона и без шаблона, запись подходов, «прошлый раз»,
+      RIR/RPE, таймер отдыха, заметки, замена и добавление упражнений, завершение и итоги.</p></div>
+    <div class="card"><h4>Каталог</h4><p>Поиск, фильтры, карточка, техника, шаги, ошибки, советы,
+      создание своих упражнений, алгоритмический подбор замены.</p></div>
+    <div class="card"><h4>Данные</h4><p>История, статистика, графики, PR, вес тела, объём по мышцам,
+      частота, экспорт бэкапа.</p></div>
+  </div>
+  <p>В приложении не будет ни одного экрана-заглушки «нет соединения» на пути к записи подхода.
+     Сеть проверяется <b>только</b> в момент обращения к AI.</p>
+</section>
+
+<section id="s21">
+  <div class="sec-head"><span class="sec-num">21</span><h2 class="sec-title">Что требует интернета</h2></div>
+  <div class="wide"><table>
+    <thead><tr><th>Функция</th><th>Поведение без сети</th></tr></thead>
+    <tbody>
+      <tr><td>AI-разбор после тренировки</td><td>Итоги показываются полностью, блок AI — со статусом «будет готов позже» и кнопкой повтора. Разбор можно запросить в любой момент из истории</td></tr>
+      <tr><td>AI-чат</td><td>Переписка читается офлайн (она в SQLite), отправка нового сообщения недоступна</td></tr>
+      <tr><td>AI-подсказки во время тренировки</td><td>Просто не появляются. Тренировка не замечает разницы</td></tr>
+      <tr><td>Ещё не скачанные изображения</td><td>Заглушка уровня 0; докачается автоматически при появлении сети</td></tr>
+      <tr><td>Обновление каталога</td><td>Приходит только с обновлением приложения — сеть для этого не нужна</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout ok"><span class="k">Принцип</span>
+    <p>AI — это надстройка. Ни одна операция трекера не ждёт ответа сети, не показывает спиннер из-за AI
+       и не может быть заблокирована его недоступностью.</p></div>
+</section>
+
+<section id="s22">
+  <div class="sec-head"><span class="sec-num">22</span><h2 class="sec-title">Что работает в Expo Go</h2></div>
+  <p>Хорошая новость: <b>весь MVP из раздела 46 и весь AI-MVP из раздела 47</b> работают в Expo Go.
+     Mac не нужен ни на одном из этапов 2–19.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Возможность</th><th>Статус</th><th>Комментарий</th></tr></thead>
+    <tbody>
+      <tr><td>Навигация, экраны, дизайн-система, тёмная тема</td><td><span class="chip ok">да</span></td><td>—</td></tr>
+      <tr><td>SQLite, миграции, FTS5-поиск</td><td><span class="chip ok">да</span></td><td>FTS включён в сборке по умолчанию</td></tr>
+      <tr><td>Изображения + дисковый кеш (<code>expo-image</code>)</td><td><span class="chip ok">да</span></td><td>—</td></tr>
+      <tr><td>Графики (SVG)</td><td><span class="chip ok">да</span></td><td>—</td></tr>
+      <tr><td>Вибрация при завершении подхода (<code>expo-haptics</code>)</td><td><span class="chip ok">да</span></td><td>—</td></tr>
+      <tr><td>Таймер отдыха, пока приложение открыто</td><td><span class="chip ok">да</span></td><td>—</td></tr>
+      <tr><td>Таймер, переживающий сворачивание приложения</td><td><span class="chip ok">да</span></td><td>Через сохранённую метку времени + <code>AppState</code>, а не JS-интервал</td></tr>
+      <tr><td>Локальное уведомление «отдых закончен»</td><td><span class="chip warn">да, но</span></td><td>Локальные уведомления в Expo Go на iOS работают; поведение при закрытом приложении проверяем на этапе 10 и при проблемах переносим в dev build</td></tr>
+      <tr><td>Drag &amp; drop порядка упражнений</td><td><span class="chip ok">да</span></td><td>reanimated + gesture-handler входят в Expo Go</td></tr>
+      <tr><td>HTTPS-запросы к AI-прокси, стриминг ответа</td><td><span class="chip ok">да</span></td><td>—</td></tr>
+      <tr><td>Экспорт/импорт файлов, «Поделиться»</td><td><span class="chip ok">да</span></td><td><code>expo-file-system</code> + <code>expo-sharing</code> + <code>expo-document-picker</code></td></tr>
+      <tr><td>Секретное хранилище для device token</td><td><span class="chip ok">да</span></td><td><code>expo-secure-store</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout warn"><span class="k">Одна практическая тонкость</span>
+    <p>Expo Go из App Store поддерживает <b>только последнюю SDK</b>. На этапе 2 первым делом сверим:
+       версия SDK проекта = версия SDK установленного Expo Go. Если App Store ещё не обновился до SDK 57
+       (на момент выхода SDK 57 сборка ждала апрува), есть два выхода: создать проект на SDK 56
+       или получить свежий Expo Go командой <code>npx eas go</code>. Разберём на месте — это 5 минут.</p></div>
+</section>
+
+<section id="s23">
+  <div class="sec-head"><span class="sec-num">23</span><h2 class="sec-title">Когда понадобится Development Build</h2></div>
+  <p>Development Build — это ваш собственный Expo Go, собранный с нужными нативными модулями.
+     Собирается <b>в облаке через EAS Build, без Mac</b>. Переходим на него только тогда, когда что-то
+     из списка станет реально нужно.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Что</th><th>Почему требует dev build</th><th>Когда</th></tr></thead>
+    <tbody>
+      <tr><td>Надёжные фоновые уведомления таймера</td><td>Нужна собственная конфигурация уведомлений</td><td>Если Expo Go подведёт на этапе 10</td></tr>
+      <tr><td>Apple Health / HealthKit</td><td>Нативный модуль + entitlement</td><td>Позже (раздел 57)</td></tr>
+      <tr><td>Live Activity таймера на Dynamic Island</td><td>Нужен нативный extension на Swift</td><td>Позже, требует Mac для разработки виджета</td></tr>
+      <tr><td>Виджеты на домашнем экране, Apple Watch</td><td>Отдельные нативные таргеты</td><td>Позже</td></tr>
+      <tr><td>Skia-графики, если захочется красоты</td><td>Нативная библиотека</td><td>Опционально</td></tr>
+      <tr><td>Шифрование базы (SQLCipher)</td><td>Плагин пересобирает нативную часть <code>expo-sqlite</code></td><td>Если решите шифровать историю</td></tr>
+      <tr><td>Своя иконка, сплэш, имя приложения, установка «навсегда»</td><td>Это уже отдельное приложение, а не Expo Go</td><td><b>Этап 20 — обязательно</b></td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><span class="k">Что нужно знать про этап 20</span>
+    <p>Сборка iOS-приложения в облаке (EAS Build) с Windows работает и Mac не требует. Но для установки
+       на <i>ваш</i> iPhone Apple требует подписи, а значит <b>Apple Developer Program — 99 $ в год</b>.
+       Без него приложение живёт только внутри Expo Go. Это единственная жёсткая финансовая развилка
+       проекта, и она откладывается до самого конца — как вы и просили в разделе 52.</p></div>
+</section>
+
+<section id="s24">
+  <div class="sec-head"><span class="sec-num">24</span><h2 class="sec-title">Что установить на Windows</h2></div>
+  <div class="wide"><table>
+    <thead><tr><th>Инструмент</th><th>Версия</th><th>Зачем</th><th>Обязательно</th></tr></thead>
+    <tbody>
+      <tr><td><b>Node.js LTS</b></td><td>≥ 22.13 (ставьте текущий LTS)</td><td>Expo SDK 57 требует минимум 22.13. Node — это движок, который запускает сервер разработки</td><td><span class="chip crit">да</span></td></tr>
+      <tr><td><b>Git</b></td><td>любая свежая</td><td>История изменений. Настоятельно: коммит после каждого этапа</td><td><span class="chip crit">да</span></td></tr>
+      <tr><td><b>VS Code</b></td><td>свежая</td><td>Редактор. Расширения: ESLint, Prettier, SQLite Viewer</td><td><span class="chip crit">да</span></td></tr>
+      <tr><td><b>Expo Go</b> на iPhone</td><td>из App Store</td><td>Запуск приложения без Xcode</td><td><span class="chip crit">да</span></td></tr>
+      <tr><td>Windows Terminal + PowerShell 7</td><td>7.x</td><td>Удобнее встроенной консоли; необязательно</td><td><span class="chip">нет</span></td></tr>
+      <tr><td>Аккаунт Expo</td><td>—</td><td>Бесплатный, понадобится на этапах 13 и 20</td><td><span class="chip">позже</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout warn"><span class="k">Чего НЕ нужно</span>
+    <p>Не нужны: Xcode, macOS, Android Studio, Java, эмуляторы, WSL, Docker, Python.
+       Не ставьте Node через Chocolatey и через установщик одновременно — будете ловить конфликт версий.</p></div>
+  <div class="callout crit"><span class="k">Три ловушки Windows, которые стоят часов отладки</span>
+    <ul>
+      <li><b>Путь к проекту.</b> Только латиница, без пробелов, <b>не в OneDrive</b> и не на рабочем столе,
+          синхронизируемом в облако. Синхронизация OneDrive ломает <code>node_modules</code>.
+          Правильно: <code>C:\dev\gymlog</code>.</li>
+      <li><b>Брандмауэр.</b> При первом запуске Windows спросит про доступ Node.js к сети —
+          нужно разрешить для <b>частных</b> сетей, иначе iPhone не увидит компьютер.</li>
+      <li><b>Одна сеть.</b> Компьютер и iPhone должны быть в одном Wi-Fi.
+          Если сеть «гостевая» или с изоляцией клиентов — поможет только режим <code>--tunnel</code>.</li>
+    </ul></div>
+</section>
+
+<section id="s25">
+  <div class="sec-head"><span class="sec-num">25</span><h2 class="sec-title">Команды PowerShell для подготовки окружения</h2></div>
+  <p>Выполнять можно уже сейчас — они ничего не создают в проекте. Открывать PowerShell лучше
+     <b>от обычного пользователя</b>, права администратора нужны только winget.</p>
+  <h3>Шаг 1. Установка инструментов</h3>
+  <div class="wide"><div class="code-label">PowerShell</div><pre><i># проверить, что winget есть (Windows 10 21H2+ / Windows 11)</i>
+winget --version
+
+<i># установить Node.js LTS, Git и VS Code</i>
+winget install --id OpenJS.NodeJS.LTS   -e
+winget install --id Git.Git             -e
+winget install --id Microsoft.VisualStudioCode -e</pre></div>
+  <h3>Шаг 2. Обязательно закрыть и открыть PowerShell заново</h3>
+  <p>Иначе новые программы не появятся в PATH и вы увидите «node не является внутренней или внешней командой».</p>
+  <h3>Шаг 3. Проверка</h3>
+  <div class="wide"><div class="code-label">PowerShell — должны увидеть версии</div><pre>node -v      <i># ожидаем v22.13 или выше</i>
+npm -v       <i># ожидаем 10.x или выше</i>
+git --version</pre></div>
+  <div class="callout warn"><span class="k">Если node -v показывает версию ниже 22.13</span>
+    <p>Обновите: <code>winget upgrade --id OpenJS.NodeJS.LTS -e</code>, снова перезапустите PowerShell.
+       Если стоят несколько Node — удалите все через «Установка и удаление программ» и поставьте заново один раз.</p></div>
+  <h3>Шаг 4. Папка проекта</h3>
+  <div class="wide"><div class="code-label">PowerShell</div><pre>New-Item -ItemType Directory -Path C:\dev -Force
+Set-Location C:\dev
+
+<i># имя и почта для коммитов (один раз на компьютер)</i>
+git config --global user.name  "Sfontvielle"
+git config --global user.email "support@fontvielle.net"</pre></div>
+  <h3>Шаг 5. Установить Expo Go на iPhone</h3>
+  <p>App Store → поиск «Expo Go» → установить → открыть один раз. Регистрироваться не обязательно.</p>
+  <div class="callout"><span class="k">Дальше — этап 2</span>
+    <p>Создание проекта (<code>npx create-expo-app</code>), установка зависимостей и первый запуск —
+       это уже этап 2. Сейчас достаточно, чтобы <code>node -v</code>, <code>npm -v</code> и <code>git --version</code>
+       отвечали версиями, а на iPhone стоял Expo Go.</p></div>
+</section>
+
+<section id="s26">
+  <div class="sec-head"><span class="sec-num">26</span><h2 class="sec-title">Как запустить первое приложение на iPhone</h2></div>
+  <p>Так это будет выглядеть на этапе 2 — чтобы вы понимали механику заранее.</p>
+  <div class="wide"><div class="code-label">PowerShell</div><pre>Set-Location C:\dev
+npx create-expo-app@latest gymlog          <i># шаблон по умолчанию: TypeScript + expo-router</i>
+Set-Location C:\dev\gymlog
+npx expo start</pre></div>
+  <ol>
+    <li>В терминале появится <b>QR-код</b> и адрес вида <code>exp://192.168.1.15:8081</code>.</li>
+    <li>Windows спросит про доступ Node.js к сети — <b>разрешить для частных сетей</b>.</li>
+    <li>На iPhone открыть <b>стандартную Камеру</b>, навести на QR, нажать всплывшую подсказку.
+        (На Android сканируют внутри Expo Go, на iOS — именно Камерой.)</li>
+    <li>Expo Go скачает бандл — первый раз 10–40 секунд.</li>
+    <li>На экране появится стартовый экран приложения.</li>
+  </ol>
+  <h3>Что должно получиться</h3>
+  <ul>
+    <li>Приложение открылось на iPhone.</li>
+    <li>Правка текста в <code>app/(tabs)/index.tsx</code> + сохранение → экран обновился <b>за секунду</b>,
+        без пересканирования QR. Это Fast Refresh, и это ваш основной цикл разработки.</li>
+    <li>Тряхнуть телефон → меню разработчика Expo Go.</li>
+  </ul>
+  <h3>Типичные проблемы и решения</h3>
+  <div class="wide"><table>
+    <thead><tr><th>Симптом</th><th>Причина</th><th>Решение</th></tr></thead>
+    <tbody>
+      <tr><td>QR отсканирован, но «не удаётся подключиться»</td><td>Брандмауэр или разные сети</td><td>Разрешить Node.js в брандмауэре; проверить, что оба в одном Wi-Fi; иначе <code>npx expo start --tunnel</code></td></tr>
+      <tr><td>«Project is incompatible with this version of Expo Go»</td><td>SDK проекта ≠ SDK клиента</td><td>Привести SDK проекта к версии Expo Go или обновить клиент (<code>npx eas go</code>)</td></tr>
+      <tr><td>Бесконечная загрузка бандла</td><td>Гостевой Wi-Fi, изоляция клиентов, VPN</td><td>Выключить VPN; <code>npx expo start --tunnel</code></td></tr>
+      <tr><td>Странные ошибки после установки пакетов</td><td>Кеш Metro</td><td><code>npx expo start -c</code></td></tr>
+      <tr><td>Ошибки про несовместимые версии пакетов</td><td>Ставили через <code>npm install</code></td><td>Всегда <code>npx expo install &lt;пакет&gt;</code> — он подбирает версию под SDK. Проверка: <code>npx expo-doctor</code></td></tr>
+      <tr><td>«EPERM», «file is locked», странные падения сборки</td><td>Проект в OneDrive или антивирус</td><td>Перенести в <code>C:\dev\gymlog</code>, добавить папку в исключения антивируса</td></tr>
+      <tr><td>Долгий старт, высокая нагрузка на диск</td><td>Индексация <code>node_modules</code></td><td>Исключить <code>C:\dev</code> из Windows Defender</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s27">
+  <div class="sec-head"><span class="sec-num">27</span><h2 class="sec-title">Технические риски, которые видны заранее</h2></div>
+  <div class="wide"><table>
+    <thead><tr><th>№</th><th>Риск</th><th>Вероятность / влияние</th><th>Что делаем заранее</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><b>Данные каталога и лицензии на изображения.</b> Это не код — это контент, и его нужно откуда-то честно взять</td><td><span class="chip crit">высокая / высокое</span></td><td>Архитектура не зависит от источника: 150–300 своих упражнений на старте, поля лицензии обязательны, скрипт-валидатор падает без них, картинки — отдельным слоем поверх</td></tr>
+      <tr><td class="num">2</td><td><b>Потеря тренировки при вылете приложения</b></td><td><span class="chip crit">средняя / критическое</span></td><td>Каждый подход пишется в SQLite немедленно; активная сессия восстанавливается при старте; никаких «сохранить в конце»</td></tr>
+      <tr><td class="num">3</td><td><b>Таймер отдыха в фоне.</b> iOS замораживает JavaScript у свёрнутого приложения — интервал «встанет»</td><td><span class="chip warn">высокая / среднее</span></td><td>Храним <i>момент окончания</i>, а не остаток; при возврате пересчитываем по часам; звук/вибрация — через локальное уведомление, запланированное заранее</td></tr>
+      <tr><td class="num">4</td><td><b>Тормоза активной тренировки</b> из-за перерисовок всего экрана</td><td><span class="chip warn">средняя / высокое</span></td><td>Zustand с точечными подписками, <code>memo</code> на строке подхода, локальный state поля ввода, запись в БД с debounce</td></tr>
+      <tr><td class="num">5</td><td><b>Несовпадение версии Expo Go и SDK</b> после обновления телефона</td><td><span class="chip warn">средняя / низкое</span></td><td>Фиксируем версию SDK в проекте, обновляемся осознанно между этапами, а не посреди работы</td></tr>
+      <tr><td class="num">6</td><td><b>FTS5 и русская морфология.</b> «жимы» не найдёт «жим»</td><td><span class="chip warn">средняя / среднее</span></td><td>Префиксный индекс + синонимы в <code>exercise_alias</code> + fallback на LIKE. Стеммер не тащим — для каталога упражнений хватает префиксов</td></tr>
+      <tr><td class="num">7</td><td><b>AI выдумывает числа</b> — главная репутационная проблема таких приложений</td><td><span class="chip warn">средняя / высокое</span></td><td>Все числа только из <code>analytics/</code>; запрет вычислений в системном промпте; сохраняем <code>context_json</code> и показываем источники в UI; проверяем на реальных данных при приёмке этапа 14</td></tr>
+      <tr><td class="num">8</td><td><b>Стоимость и латентность AI</b></td><td><span class="chip">низкая / среднее</span></td><td>Кеш разбора, лимит вызовов инструментов, лимиты в Worker, быстрая модель для коротких подсказок, полное выключение AI в настройках</td></tr>
+      <tr><td class="num">9</td><td><b>Миграции ломают базу</b> при неаккуратном изменении</td><td><span class="chip">низкая / критическое</span></td><td>Миграции неизменяемы после выпуска; тесты миграций на копии базы; автоматический бэкап <code>.db</code> перед каждой миграцией</td></tr>
+      <tr><td class="num">10</td><td><b>Ограничения Windows</b>: пути, OneDrive, брандмауэр, антивирус</td><td><span class="chip warn">высокая / низкое</span></td><td>Раздел 24 — правила заданы до создания проекта</td></tr>
+      <tr><td class="num">11</td><td><b>Разрастание объёма приложения</b> из-за встроенных картинок</td><td><span class="chip">низкая / среднее</span></td><td>В бандле только миниатюры топ-100 в WebP; остальное — по требованию с кешем и бюджетом</td></tr>
+      <tr><td class="num">12</td><td><b>Проект остановится на этапе 20</b> из-за Apple Developer Program</td><td><span class="chip warn">средняя / среднее</span></td><td>Знаем заранее: до этапа 20 всё живёт в Expo Go; решение про 99 $/год принимается только когда приложение уже работает</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s28">
+  <div class="sec-head"><span class="sec-num">28</span><h2 class="sec-title">Что входит в MVP, а что откладываем</h2></div>
+  <h3>MVP — этапы 2–9</h3>
+  <p>Критерий приёмки — ровно ваш сценарий из раздела 46, выполненный в зале на реальной тренировке.</p>
+  <div class="wide"><table>
+    <thead><tr><th>Входит</th><th>Не входит в MVP</th></tr></thead>
+    <tbody>
+      <tr><td>Каталог: поиск, фильтры, карточка, свои упражнения</td><td>Тысячи упражнений, фото и анимации</td></tr>
+      <tr><td>Шаблоны: создать, изменить, переупорядочить, дублировать</td><td>Папки, суперсеты, целевые диапазоны повторов</td></tr>
+      <tr><td>Активная тренировка: подходы, «прошлый раз», добавить/удалить подход</td><td>Замена упражнения на лету, AI-подсказки</td></tr>
+      <tr><td>Завершение, итоги, история, read-only просмотр</td><td>Редактирование истории</td></tr>
+      <tr><td>Объём, 1RM, PR, графики прогресса, вес тела</td><td>Объём по мышцам, календарь, застой</td></tr>
+      <tr><td>Тёмная тема, тактильный отклик, таймер отдыха</td><td>Уведомления, Live Activities, виджеты</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Сразу после MVP — этапы 10–11</h3>
+  <p>RIR/RPE, настраиваемый таймер, чек-ин самочувствия, мини-бар тренировки, замена упражнения,
+     календарь. Это то, что превращает рабочий прототип в приложение, которым приятно пользоваться.</p>
+  <h3>AI — этапы 12–17</h3>
+  <p>Начинаем только когда трекер стабилен и в базе есть <b>минимум 6–8 реальных тренировок</b>.
+     AI без данных бессмысленен: его невозможно ни проверить, ни настроить.</p>
+  <h3>Откладываем сознательно</h3>
+  <p>Всё из раздела 45 (соцсеть, питание, подписки), плюс из раздела 57: iCloud-синхронизация,
+     HealthKit, Apple Watch, Live Activities, виджеты, Siri, генерация программ тренировок AI.
+     Архитектура к ним готова — UUID-ключи, <code>updated_at</code>, мягкое удаление, экспорт, —
+     но кода сейчас не пишем.</p>
+</section>
+
+<section id="s29">
+  <div class="sec-head"><span class="sec-num">29</span><h2 class="sec-title">Рекомендуемый порядок разработки</h2></div>
+  <p>Ваш список из 20 этапов правильный. Предлагаю три уточнения, которые экономят время.</p>
+  <div class="callout"><span class="k">Изменение 1 — миграции и «скелет данных» раньше UI</span>
+    <p>На этапе 3 делаем не только таблицы, но и <b>сразу</b> раннер миграций, сидер каталога и
+       10 тестовых тренировок в базе. Тогда этапы 4–9 разрабатываются на реальных данных,
+       а не на пустых экранах, и все проблемы производительности видны сразу.</p></div>
+  <div class="callout"><span class="k">Изменение 2 — аналитика раньше графиков</span>
+    <p>Слой <code>analytics/</code> с тестами пишем в конце этапа 7 (одновременно с завершением тренировки),
+       а не на этапе 9. Причина: итоги тренировки и определение PR нужны уже при первом «Завершить»,
+       иначе их придётся переделывать.</p></div>
+  <div class="callout"><span class="k">Изменение 3 — тесты не отдельным этапом</span>
+    <p>Этап 19 «Тестирование» в конце — ловушка. Тесты на <code>analytics/</code> и миграции пишем
+       вместе с кодом (это буквально 10 минут на функцию), а этап 19 оставляем на реальную
+       эксплуатацию: месяц тренировок с приложением и правка того, что мешает.</p></div>
+  <div class="wide"><table>
+    <thead><tr><th>Этап</th><th>Содержание</th><th>Признак «готово»</th></tr></thead>
+    <tbody>
+      <tr><td class="num">2</td><td>Проект, навигация, дизайн-система, темы</td><td>5 вкладок открываются на iPhone, тёмная тема работает</td></tr>
+      <tr><td class="num">3</td><td>SQLite, миграции, repositories, сидер, тестовые данные</td><td>База создаётся и переживает перезапуск; видно тестовые тренировки</td></tr>
+      <tr><td class="num">4</td><td>Каталог: импорт, поиск, фильтры, свои упражнения</td><td>Поиск по 300 упражнениям без задержки</td></tr>
+      <tr><td class="num">5</td><td>Карточка упражнения, медиа-слой, кеш изображений</td><td>Карточка открывается офлайн; заглушки на месте</td></tr>
+      <tr><td class="num">6</td><td>Шаблоны: CRUD, порядок, дублирование, папки</td><td>Создана тренировка «Грудь» с тремя упражнениями</td></tr>
+      <tr><td class="num">7</td><td>Активная тренировка + завершение + analytics</td><td>Первая реальная тренировка записана в зале</td></tr>
+      <tr><td class="num">8</td><td>История, детальный просмотр, read-only</td><td>Прошлая тренировка открывается и читается</td></tr>
+      <tr><td class="num">9</td><td>Прогресс, графики, PR, вес тела</td><td><b>Сценарий раздела 46 пройден целиком</b></td></tr>
+      <tr><td class="num">10</td><td>RIR/RPE, таймер, чек-ин самочувствия</td><td>Таймер переживает сворачивание приложения</td></tr>
+      <tr><td class="num">11</td><td>UX-полировка: мини-бар, замена упражнения, календарь, жесты</td><td>Тренировка идёт без «где эта кнопка?»</td></tr>
+      <tr><td class="num">12</td><td>AI Context + AI Tools (локально, без сети)</td><td>Инструменты возвращают корректный JSON, покрыты тестами</td></tr>
+      <tr><td class="num">13</td><td>Прокси на Cloudflare Worker</td><td>Приложение получает ответ модели; ключа в приложении нет</td></tr>
+      <tr><td class="num">14</td><td>AI-разбор после тренировки</td><td>Разбор совпадает с числами приложения — сверено вручную</td></tr>
+      <tr><td class="num">15</td><td>AI-чат с инструментами</td><td>«Как идёт жим лёжа?» — ответ по реальной истории</td></tr>
+      <tr><td class="num">16</td><td>AI в карточке упражнения, подбор замены</td><td>Замены предлагает алгоритм, AI объясняет разницу</td></tr>
+      <tr><td class="num">17</td><td>AI Memory + управление ею в настройках</td><td>Факт добавлен, отредактирован, удалён</td></tr>
+      <tr><td class="num">18</td><td>Экспорт/импорт JSON и CSV</td><td>Бэкап выгружен и успешно загружен обратно</td></tr>
+      <tr><td class="num">19</td><td>Реальная эксплуатация и правки</td><td>Месяц тренировок без потери данных</td></tr>
+      <tr><td class="num">20</td><td>EAS Build, установка на iPhone без Expo Go</td><td>Иконка GymLog на домашнем экране</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="s30">
+  <div class="sec-head"><span class="sec-num">30</span><h2 class="sec-title">Решения, которые нужно принять сейчас</h2></div>
+  <p>Это те развилки, где ошибка означает переписывание базы и потерю истории.
+     Всё остальное можно менять по ходу.</p>
+  <div class="wide"><table>
+    <thead><tr><th>№</th><th>Решение</th><th>Цена ошибки, если решить позже</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><b>UUID-строки как первичные ключи</b>, не автоинкремент</td><td>Импорт бэкапа и синхронизация между устройствами станут невозможны без пересборки всех ссылок</td></tr>
+      <tr><td class="num">2</td><td><b>Вес всегда в килограммах</b> в базе; фунты — только отображение</td><td>Смешанные единицы = вся статистика и все PR за прошлые годы неверны навсегда</td></tr>
+      <tr><td class="num">3</td><td><b><code>metric_type</code> у каждого упражнения</b> с первого дня</td><td>Кардио, планка и подтягивания с весом не влезут в модель «вес × повторы»; переделка UI + аналитики + истории</td></tr>
+      <tr><td class="num">4</td><td><b><code>set_type</code></b> (разминка / рабочий / дроп)</td><td>Разминочные подходы попадут в объём и PR — статистика станет ложью</td></tr>
+      <tr><td class="num">5</td><td><b>Снимки в <code>workout_exercise</code> и <code>workout_set</code></b></td><td>Переименование или удаление упражнения разрушит старые тренировки</td></tr>
+      <tr><td class="num">6</td><td><b>Мягкое удаление + <code>updated_at</code></b> везде</td><td>Синхронизация и инкрементальный экспорт потребуют новой миграции по всем таблицам</td></tr>
+      <tr><td class="num">7</td><td><b>Каталог и свои упражнения — одна таблица</b>, разделены полем <code>source</code></td><td>Дублирование логики поиска, статистики и AI для «своих» упражнений</td></tr>
+      <tr><td class="num">8</td><td><b>Система миграций с первого дня</b></td><td>Любое изменение схемы = «удалите приложение», то есть потеря всех тренировок</td></tr>
+      <tr><td class="num">9</td><td><b>Каждый подход пишется в БД сразу</b>, стор — только зеркало</td><td>Однажды потеряете тренировку целиком. Это происходит не «если», а «когда»</td></tr>
+      <tr><td class="num">10</td><td><b>Числа считает код, AI только объясняет</b></td><td>Красивое, убедительное и неправильное приложение. Доверять ему будет нельзя</td></tr>
+      <tr><td class="num">11</td><td><b>История строго по <code>exercise_id</code></b>, семейства — только для подсказок</td><td>Жим в Смите смешается с жимом штанги; PR станут бессмысленными</td></tr>
+      <tr><td class="num">12</td><td><b>Ключ AI — только на сервере</b>, инструменты — только на телефоне</td><td>Украденный ключ и/или ваша тренировочная история на чужом сервере</td></tr>
+      <tr><td class="num">13</td><td><b>Никакого SQL в компонентах</b> — только repositories</td><td>Оптимизировать и менять схему станет невозможно: запросы будут размазаны по 40 экранам</td></tr>
+      <tr><td class="num">14</td><td><b>Обязательные <code>license</code> / <code>attribution</code> у медиа</b>, проверяются скриптом</td><td>Юридический риск и невозможность выложить приложение в App Store</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout ok"><span class="k">Что от вас нужно перед этапом 2</span>
+    <ol>
+      <li>Согласовать <b>5 вкладок</b> вместо 7 (раздел 7) — или сказать, что хотите иначе.</li>
+      <li>Подтвердить, что <b>кг</b> — ваша основная единица.</li>
+      <li>Сказать, какую систему предпочитаете: <b>RIR</b> или <b>RPE</b> (можно обе, но по умолчанию одна).</li>
+      <li>Завести <b>отдельный репозиторий</b> для GymLog.</li>
+      <li>Выполнить команды из раздела 25 и убедиться, что <code>node -v</code> ≥ 22.13.</li>
+    </ol></div>
+</section>
+
+<div class="foot">
+  <p><b>GymLog · Этап 1 — архитектура.</b> Документ описывает решения до написания кода.
+     Версии библиотек проверены по документации Expo на август 2026 (Expo SDK 57, React Native 0.86, React 19.2).
+     Дальше — этап 2: создание проекта, навигация и дизайн-система. Не начинаю его без вашего согласования.</p>
+</div>
+
+</main>
+</div>
