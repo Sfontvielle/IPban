@@ -33,7 +33,6 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-asset",
-      "expo-sharing",
       [
         "expo-splash-screen",
         {

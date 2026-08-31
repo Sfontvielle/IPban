@@ -97,6 +97,21 @@ export const TemplateRepository = {
     return rows.map(mapTemplate);
   },
 
+  /**
+   * Список шаблонов сразу с числом упражнений.
+   * Раньше экран делал отдельный запрос на каждый шаблон — теперь один запрос на всё.
+   */
+  async listWithCounts(): Promise<(WorkoutTemplate & { exerciseCount: number })[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<Row>(
+      `SELECT t.*, (SELECT COUNT(*) FROM template_exercise te WHERE te.template_id = t.id) AS exercise_count
+       FROM workout_template t
+       WHERE t.deleted_at IS NULL
+       ORDER BY t.is_favorite DESC, t.position, t.name COLLATE NOCASE`,
+    );
+    return rows.map((row) => ({ ...mapTemplate(row), exerciseCount: Number(row.exercise_count ?? 0) }));
+  },
+
   async listRecent(limit = 3): Promise<WorkoutTemplate[]> {
     const db = await getDatabase();
     const rows = await db.getAllAsync<Row>(

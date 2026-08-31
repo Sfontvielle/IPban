@@ -23,16 +23,10 @@ export function TemplatesScreen() {
 
   const reload = useCallback(async () => {
     const [list, folderList] = await Promise.all([
-      TemplateRepository.list(),
+      TemplateRepository.listWithCounts(),
       TemplateRepository.listFolders(),
     ]);
-    const withCounts = await Promise.all(
-      list.map(async (template) => ({
-        ...template,
-        exerciseCount: (await TemplateRepository.listExercises(template.id)).length,
-      })),
-    );
-    setTemplates(withCounts);
+    setTemplates(list);
     setFolders(folderList);
   }, []);
 

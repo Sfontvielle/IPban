@@ -49,14 +49,23 @@ export function ActiveWorkoutScreen() {
     return () => clearInterval(interval);
   }, [store.session]);
 
+  // Действия достаём из стора по одному: их ссылки стабильны,
+  // поэтому карточки упражнений не перерисовываются лишний раз.
+  const toggleSetCompleted = useActiveWorkoutStore((s) => s.toggleSetCompleted);
+  const patchSet = useActiveWorkoutStore((s) => s.patchSet);
+  const addSet = useActiveWorkoutStore((s) => s.addSet);
+  const removeSet = useActiveWorkoutStore((s) => s.removeSet);
+  const removeExercise = useActiveWorkoutStore((s) => s.removeExercise);
+  const moveExercise = useActiveWorkoutStore((s) => s.moveExercise);
+
   const handleToggleSet = useCallback(
     async (setId: string, restSec: number | null) => {
-      const completed = await store.toggleSetCompleted(setId);
+      const completed = await toggleSetCompleted(setId);
       if (completed && settings.autoRestTimer) {
         startRest(restSec ?? settings.defaultRestSec);
       }
     },
-    [settings.autoRestTimer, settings.defaultRestSec, startRest, store],
+    [settings.autoRestTimer, settings.defaultRestSec, startRest, toggleSetCompleted],
   );
 
   const finish = () => {
@@ -143,20 +152,18 @@ export function ActiveWorkoutScreen() {
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <ExerciseBlock
             exercise={item}
             previous={item.exerciseId ? store.previous[item.exerciseId] ?? null : null}
             unit={settings.unit}
             intensityMode={settings.intensityMode}
-            isFirst={index === 0}
-            isLast={index === store.exercises.length - 1}
-            onAddSet={() => store.addSet(item.id)}
-            onPatchSet={(setId, patch) => store.patchSet(setId, patch)}
-            onToggleSet={(setId) => handleToggleSet(setId, item.restSec)}
-            onDeleteSet={(setId) => store.removeSet(setId)}
-            onRemove={() => store.removeExercise(item.id)}
-            onMove={(direction) => store.moveExercise(item.id, direction)}
+            onAddSet={addSet}
+            onPatchSet={patchSet}
+            onToggleSet={handleToggleSet}
+            onDeleteSet={removeSet}
+            onRemove={removeExercise}
+            onMove={moveExercise}
           />
         )}
         ListEmptyComponent={

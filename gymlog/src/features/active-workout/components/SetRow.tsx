@@ -17,9 +17,11 @@ interface Props {
   metricType: MetricType;
   unit: WeightUnit;
   intensityMode: IntensityMode;
-  onPatch: (patch: SetPatch) => void;
-  onToggle: () => void;
-  onDelete: () => void;
+  /** Обработчики принимают id подхода, чтобы оставаться стабильными между рендерами
+   *  — иначе React.memo на этой строке не имел бы смысла. */
+  onPatch: (setId: string, patch: SetPatch) => void;
+  onToggle: (setId: string) => void;
+  onDelete: (setId: string) => void;
 }
 
 function parseNumber(text: string): number | null {
@@ -95,21 +97,30 @@ export const SetRow = React.memo(function SetRow({
   const commitWeight = (text: string) => {
     const value = parseNumber(text);
     const kg = value === null ? null : toKg(value, unit);
-    if (ADDED_METRICS.includes(metricType)) onPatch({ addedWeightKg: kg });
-    else if (ASSIST_METRICS.includes(metricType)) onPatch({ assistKg: kg });
-    else onPatch({ weightKg: kg });
+    if (ADDED_METRICS.includes(metricType)) onPatch(set.id, { addedWeightKg: kg });
+    else if (ASSIST_METRICS.includes(metricType)) onPatch(set.id, { assistKg: kg });
+    else onPatch(set.id, { weightKg: kg });
+  };
+
+  const commitIntensity = () => {
+    onPatch(
+      set.id,
+      intensityMode === 'rpe'
+        ? { rpe: parseNumber(intensityText) }
+        : { rir: parseNumber(intensityText) },
+    );
   };
 
   const toggle = () => {
     Haptics.impactAsync(
       set.isCompleted ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
     ).catch(() => {});
-    onToggle();
+    onToggle(set.id);
   };
 
   const cycleSetType = () => {
     const next = set.setType === 'working' ? 'warmup' : set.setType === 'warmup' ? 'dropset' : 'working';
-    onPatch({ setType: next });
+    onPatch(set.id, { setType: next });
   };
 
   const inputStyle = [
@@ -133,7 +144,12 @@ export const SetRow = React.memo(function SetRow({
         },
       ]}
     >
-      <Pressable onPress={cycleSetType} onLongPress={onDelete} hitSlop={8} style={styles.indexCell}>
+      <Pressable
+        onPress={cycleSetType}
+        onLongPress={() => onDelete(set.id)}
+        hitSlop={8}
+        style={styles.indexCell}
+      >
         <Txt variant="small" weight="700" tone={badgeTone} tabular>{badgeLabel}</Txt>
       </Pressable>
 
@@ -162,8 +178,8 @@ export const SetRow = React.memo(function SetRow({
         <TextInput
           value={repsText}
           onChangeText={setRepsText}
-          onEndEditing={() => onPatch({ reps: parseNumber(repsText) })}
-          onBlur={() => onPatch({ reps: parseNumber(repsText) })}
+          onEndEditing={() => onPatch(set.id, { reps: parseNumber(repsText) })}
+          onBlur={() => onPatch(set.id, { reps: parseNumber(repsText) })}
           keyboardType="number-pad"
           returnKeyType="done"
           selectTextOnFocus
@@ -177,8 +193,8 @@ export const SetRow = React.memo(function SetRow({
         <TextInput
           value={timeText}
           onChangeText={setTimeText}
-          onEndEditing={() => onPatch({ durationSec: parseNumber(timeText) })}
-          onBlur={() => onPatch({ durationSec: parseNumber(timeText) })}
+          onEndEditing={() => onPatch(set.id, { durationSec: parseNumber(timeText) })}
+          onBlur={() => onPatch(set.id, { durationSec: parseNumber(timeText) })}
           keyboardType="number-pad"
           returnKeyType="done"
           selectTextOnFocus
@@ -192,8 +208,8 @@ export const SetRow = React.memo(function SetRow({
         <TextInput
           value={distanceText}
           onChangeText={setDistanceText}
-          onEndEditing={() => onPatch({ distanceM: parseNumber(distanceText) })}
-          onBlur={() => onPatch({ distanceM: parseNumber(distanceText) })}
+          onEndEditing={() => onPatch(set.id, { distanceM: parseNumber(distanceText) })}
+          onBlur={() => onPatch(set.id, { distanceM: parseNumber(distanceText) })}
           keyboardType="decimal-pad"
           returnKeyType="done"
           selectTextOnFocus
@@ -207,20 +223,8 @@ export const SetRow = React.memo(function SetRow({
         <TextInput
           value={intensityText}
           onChangeText={setIntensityText}
-          onEndEditing={() =>
-            onPatch(
-              intensityMode === 'rpe'
-                ? { rpe: parseNumber(intensityText) }
-                : { rir: parseNumber(intensityText) },
-            )
-          }
-          onBlur={() =>
-            onPatch(
-              intensityMode === 'rpe'
-                ? { rpe: parseNumber(intensityText) }
-                : { rir: parseNumber(intensityText) },
-            )
-          }
+          onEndEditing={() => commitIntensity()}
+          onBlur={() => commitIntensity()}
           keyboardType="decimal-pad"
           returnKeyType="done"
           selectTextOnFocus

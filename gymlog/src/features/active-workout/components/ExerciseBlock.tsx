@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
@@ -19,23 +19,21 @@ interface Props {
   previous: PreviousPerformance | null;
   unit: WeightUnit;
   intensityMode: IntensityMode;
-  isFirst: boolean;
-  isLast: boolean;
-  onAddSet: () => void;
+  /** Все обработчики стабильны и принимают id — благодаря этому
+   *  React.memo реально останавливает перерисовку соседних упражнений. */
+  onAddSet: (workoutExerciseId: string) => void;
   onPatchSet: (setId: string, patch: SetPatch) => void;
-  onToggleSet: (setId: string) => void;
+  onToggleSet: (setId: string, restSec: number | null) => void;
   onDeleteSet: (setId: string) => void;
-  onRemove: () => void;
-  onMove: (direction: -1 | 1) => void;
+  onRemove: (workoutExerciseId: string) => void;
+  onMove: (workoutExerciseId: string, direction: -1 | 1) => void;
 }
 
-export function ExerciseBlock({
+export const ExerciseBlock = React.memo(function ExerciseBlock({
   exercise,
   previous,
   unit,
   intensityMode,
-  isFirst,
-  isLast,
   onAddSet,
   onPatchSet,
   onToggleSet,
@@ -46,19 +44,33 @@ export function ExerciseBlock({
   const palette = usePalette();
   const router = useRouter();
 
+  const handleToggle = useCallback(
+    (setId: string) => onToggleSet(setId, exercise.restSec),
+    [onToggleSet, exercise.restSec],
+  );
+
+  const handleDelete = useCallback(
+    (setId: string) =>
+      Alert.alert('Удалить подход?', undefined, [
+        { text: 'Отмена', style: 'cancel' },
+        { text: 'Удалить', style: 'destructive', onPress: () => onDeleteSet(setId) },
+      ]),
+    [onDeleteSet],
+  );
+
   const showMenu = () => {
     Alert.alert(exercise.exerciseName, undefined, [
       { text: 'Техника и история', onPress: () => exercise.exerciseId && router.push(`/exercise/${exercise.exerciseId}`) },
       { text: 'Заменить упражнение', onPress: () => router.push(`/exercise/picker?replaceId=${exercise.id}`) },
-      { text: 'Вверх', onPress: () => onMove(-1) },
-      { text: 'Вниз', onPress: () => onMove(1) },
+      { text: 'Вверх', onPress: () => onMove(exercise.id, -1) },
+      { text: 'Вниз', onPress: () => onMove(exercise.id, 1) },
       {
         text: 'Убрать из тренировки',
         style: 'destructive',
         onPress: () =>
           Alert.alert('Убрать упражнение?', 'Записанные подходы этого упражнения будут удалены.', [
             { text: 'Отмена', style: 'cancel' },
-            { text: 'Убрать', style: 'destructive', onPress: onRemove },
+            { text: 'Убрать', style: 'destructive', onPress: () => onRemove(exercise.id) },
           ]),
       },
       { text: 'Закрыть', style: 'cancel' },
@@ -130,23 +142,18 @@ export function ExerciseBlock({
           metricType={exercise.metricType}
           unit={unit}
           intensityMode={intensityMode}
-          onPatch={(patch) => onPatchSet(set.id, patch)}
-          onToggle={() => onToggleSet(set.id)}
-          onDelete={() =>
-            Alert.alert('Удалить подход?', undefined, [
-              { text: 'Отмена', style: 'cancel' },
-              { text: 'Удалить', style: 'destructive', onPress: () => onDeleteSet(set.id) },
-            ])
-          }
+          onPatch={onPatchSet}
+          onToggle={handleToggle}
+          onDelete={handleDelete}
         />
       ))}
 
-      <Pressable onPress={onAddSet} style={styles.addSet}>
+      <Pressable onPress={() => onAddSet(exercise.id)} style={styles.addSet}>
         <Txt variant="small" weight="600" tone="accent">+ Добавить подход</Txt>
       </Pressable>
     </Card>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: { marginBottom: spacing.md, overflow: 'hidden' },

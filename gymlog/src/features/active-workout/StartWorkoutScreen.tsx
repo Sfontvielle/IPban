@@ -28,7 +28,7 @@ export function StartWorkoutScreen() {
   const palette = usePalette();
   const loadSession = useActiveWorkoutStore((s) => s.load);
 
-  const [templates, setTemplates] = useState<(WorkoutTemplate & { count: number })[]>([]);
+  const [templates, setTemplates] = useState<(WorkoutTemplate & { exerciseCount: number })[]>([]);
   const [mood, setMood] = useState<number | null>(null);
   const [sleep, setSleep] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
@@ -40,14 +40,7 @@ export function StartWorkoutScreen() {
         router.replace('/workout/active');
         return;
       }
-      const list = await TemplateRepository.list();
-      const withCount = await Promise.all(
-        list.map(async (template) => ({
-          ...template,
-          count: (await TemplateRepository.listExercises(template.id)).length,
-        })),
-      );
-      setTemplates(withCount);
+      setTemplates(await TemplateRepository.listWithCounts());
     })();
   }, [router]);
 
@@ -117,7 +110,7 @@ export function StartWorkoutScreen() {
         <Card key={template.id} onPress={() => begin(template.id)} style={styles.template}>
           <Txt variant="title" numberOfLines={1}>{template.name}</Txt>
           <Txt variant="small" tone="muted">
-            {template.count} {plural(template.count, 'упражнение', 'упражнения', 'упражнений')}
+            {template.exerciseCount} {plural(template.exerciseCount, 'упражнение', 'упражнения', 'упражнений')}
           </Txt>
         </Card>
       ))}

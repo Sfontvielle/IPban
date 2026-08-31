@@ -45,7 +45,7 @@ interface CatalogFile {
 
 const catalog = catalogData as unknown as CatalogFile;
 
-const CHUNK_SIZE = 25;
+const CHUNK_SIZE = 60;
 const META_KEY = 'catalog_version';
 
 export const CATALOG_VERSION = catalog.version;
@@ -66,13 +66,45 @@ async function getInstalledVersion(db: Database): Promise<number> {
   return row ? Number(row.value) : 0;
 }
 
+/**
+ * Многострочная вставка: одна инструкция вместо N.
+ * На первом запуске это разница между «секунда» и «десять секунд» на телефоне.
+ */
+async function insertMany(
+  tx: Database,
+  table: string,
+  columns: string[],
+  rows: (string | number | null)[][],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const placeholder = `(${columns.map(() => '?').join(',')})`;
+  // SQLite ограничивает число параметров в одном запросе — режем на безопасные порции.
+  const perStatement = Math.max(1, Math.floor(900 / columns.length));
+
+  for (let i = 0; i < rows.length; i += perStatement) {
+    const slice = rows.slice(i, i + perStatement);
+    const sql =
+      `INSERT OR REPLACE INTO ${table} (${columns.join(',')}) VALUES ` +
+      slice.map(() => placeholder).join(',');
+    await tx.runAsync(sql, slice.flat());
+  }
+}
+
 async function upsertChunk(
   db: Database,
   chunk: CatalogExercise[],
   now: number,
   withFts: boolean,
+  isFreshInstall: boolean,
 ): Promise<void> {
   await db.withExclusiveTransactionAsync(async (tx) => {
+    const aliases: (string | number | null)[][] = [];
+    const muscles: (string | number | null)[][] = [];
+    const equipment: (string | number | null)[][] = [];
+    const tags: (string | number | null)[][] = [];
+    const instructions: (string | number | null)[][] = [];
+    const ftsRows: (string | number | null)[][] = [];
+
     for (const item of chunk) {
       await tx.runAsync(
         `INSERT INTO exercise (
@@ -107,68 +139,58 @@ async function upsertChunk(
         ],
       );
 
-      // Дочерние таблицы перезаписываем целиком — так проще и надёжнее, чем diff.
-      await tx.runAsync('DELETE FROM exercise_alias WHERE exercise_id = ?', [item.id]);
-      await tx.runAsync('DELETE FROM exercise_muscle WHERE exercise_id = ?', [item.id]);
-      await tx.runAsync('DELETE FROM exercise_equipment WHERE exercise_id = ?', [item.id]);
-      await tx.runAsync('DELETE FROM exercise_tag WHERE exercise_id = ?', [item.id]);
-      await tx.runAsync('DELETE FROM exercise_instruction WHERE exercise_id = ?', [item.id]);
+      // На чистой установке удалять нечего — пропускаем лишние запросы.
+      if (!isFreshInstall) {
+        await tx.runAsync('DELETE FROM exercise_alias WHERE exercise_id = ?', [item.id]);
+        await tx.runAsync('DELETE FROM exercise_muscle WHERE exercise_id = ?', [item.id]);
+        await tx.runAsync('DELETE FROM exercise_equipment WHERE exercise_id = ?', [item.id]);
+        await tx.runAsync('DELETE FROM exercise_tag WHERE exercise_id = ?', [item.id]);
+        await tx.runAsync('DELETE FROM exercise_instruction WHERE exercise_id = ?', [item.id]);
+        if (withFts) await tx.runAsync('DELETE FROM exercise_fts WHERE exercise_id = ?', [item.id]);
+      }
 
-      for (const alias of item.aliases) {
-        await tx.runAsync('INSERT INTO exercise_alias (id, exercise_id, name) VALUES (?,?,?)', [
-          newId(), item.id, alias,
-        ]);
-      }
-      let musclePosition = 0;
-      for (const muscle of item.primaryMuscles) {
-        await tx.runAsync(
-          'INSERT OR REPLACE INTO exercise_muscle (exercise_id, muscle, role, position) VALUES (?,?,?,?)',
-          [item.id, muscle, 'primary', musclePosition++],
-        );
-      }
-      musclePosition = 0;
-      for (const muscle of item.secondaryMuscles) {
-        await tx.runAsync(
-          'INSERT OR REPLACE INTO exercise_muscle (exercise_id, muscle, role, position) VALUES (?,?,?,?)',
-          [item.id, muscle, 'secondary', musclePosition++],
-        );
-      }
-      let equipmentIndex = 0;
-      for (const equipment of item.equipment) {
-        await tx.runAsync(
-          'INSERT OR REPLACE INTO exercise_equipment (exercise_id, equipment, is_primary) VALUES (?,?,?)',
-          [item.id, equipment, equipmentIndex === 0 ? 1 : 0],
-        );
-        equipmentIndex += 1;
-      }
-      for (const tag of item.tags) {
-        await tx.runAsync('INSERT OR REPLACE INTO exercise_tag (exercise_id, tag) VALUES (?,?)', [
-          item.id, tag,
-        ]);
-      }
+      for (const alias of item.aliases) aliases.push([newId(), item.id, alias]);
+      item.primaryMuscles.forEach((muscle, index) =>
+        muscles.push([item.id, muscle, 'primary', index]));
+      item.secondaryMuscles.forEach((muscle, index) =>
+        muscles.push([item.id, muscle, 'secondary', index]));
+      item.equipment.forEach((value, index) =>
+        equipment.push([item.id, value, index === 0 ? 1 : 0]));
+      for (const tag of item.tags) tags.push([item.id, tag]);
       for (const instruction of item.instructions) {
-        await tx.runAsync(
-          'INSERT INTO exercise_instruction (id, exercise_id, kind, position, text) VALUES (?,?,?,?,?)',
-          [newId(), item.id, instruction.kind, instruction.position, instruction.text],
-        );
+        instructions.push([newId(), item.id, instruction.kind, instruction.position, instruction.text]);
       }
 
       if (withFts) {
-        await tx.runAsync('DELETE FROM exercise_fts WHERE exercise_id = ?', [item.id]);
-        await tx.runAsync(
-          `INSERT INTO exercise_fts (exercise_id, name_ru, name_en, aliases, muscles, equipment, tags)
-           VALUES (?,?,?,?,?,?,?)`,
-          [
-            item.id,
-            normalize(item.nameRu),
-            normalize(item.nameEn ?? ''),
-            normalize(item.aliases.join(' ')),
-            normalize([...item.primaryMuscles, ...item.secondaryMuscles].join(' ')),
-            normalize(item.equipment.join(' ')),
-            normalize(item.tags.join(' ')),
-          ],
-        );
+        ftsRows.push([
+          item.id,
+          normalize(item.nameRu),
+          normalize(item.nameEn ?? ''),
+          normalize(item.aliases.join(' ')),
+          normalize([...item.primaryMuscles, ...item.secondaryMuscles].join(' ')),
+          normalize(item.equipment.join(' ')),
+          normalize(item.tags.join(' ')),
+        ]);
       }
+    }
+
+    await insertMany(tx, 'exercise_alias', ['id', 'exercise_id', 'name'], aliases);
+    await insertMany(tx, 'exercise_muscle', ['exercise_id', 'muscle', 'role', 'position'], muscles);
+    await insertMany(tx, 'exercise_equipment', ['exercise_id', 'equipment', 'is_primary'], equipment);
+    await insertMany(tx, 'exercise_tag', ['exercise_id', 'tag'], tags);
+    await insertMany(
+      tx,
+      'exercise_instruction',
+      ['id', 'exercise_id', 'kind', 'position', 'text'],
+      instructions,
+    );
+    if (withFts) {
+      await insertMany(
+        tx,
+        'exercise_fts',
+        ['exercise_id', 'name_ru', 'name_en', 'aliases', 'muscles', 'equipment', 'tags'],
+        ftsRows,
+      );
     }
   });
 }
@@ -203,8 +225,9 @@ export async function seedCatalog(db: Database): Promise<SeedResult> {
   }
 
   const now = Date.now();
+  const isFreshInstall = installed === 0;
   for (let i = 0; i < catalog.exercises.length; i += CHUNK_SIZE) {
-    await upsertChunk(db, catalog.exercises.slice(i, i + CHUNK_SIZE), now, ftsEnabled);
+    await upsertChunk(db, catalog.exercises.slice(i, i + CHUNK_SIZE), now, ftsEnabled, isFreshInstall);
   }
 
   // Упражнения, исчезнувшие из поставки, скрываем, но не удаляем: на них ссылается история.
