@@ -2,83 +2,90 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import { getDatabase } from '@/db/client';
 import { migrate } from '@/db/migrations';
-import { seedCatalog } from '@/db/seed/CatalogSeeder';
+import { isFtsAvailable, seedCatalog } from '@/db/seed/CatalogSeeder';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { errorMessage } from '@/utils/result';
 
 interface DatabaseStatus {
   ready: boolean;
   error: string | null;
-  /** Каталог не загрузился, но приложение работает — это не повод не пускать в тренировку. */
+  /** Каталог грузится в фоне — приложением можно пользоваться, не дожидаясь его. */
+  catalogLoading: boolean;
+  catalogProgress: number;
   catalogWarning: string | null;
   ftsEnabled: boolean;
   exerciseCount: number;
   stage: string;
 }
 
-const DatabaseContext = createContext<DatabaseStatus>({
+const INITIAL: DatabaseStatus = {
   ready: false,
   error: null,
+  catalogLoading: false,
+  catalogProgress: 0,
   catalogWarning: null,
   ftsEnabled: false,
   exerciseCount: 0,
-  stage: 'старт',
-});
+  stage: 'запуск',
+};
+
+const DatabaseContext = createContext<DatabaseStatus>(INITIAL);
+
+/** Даём интерфейсу отрисоваться до первого обращения к нативной базе. */
+function nextTick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<DatabaseStatus>({
-    ready: false,
-    error: null,
-    catalogWarning: null,
-    ftsEnabled: false,
-    exerciseCount: 0,
-    stage: 'открываю базу',
-  });
+  const [status, setStatus] = useState<DatabaseStatus>(INITIAL);
   const loadSettings = useSettingsStore((s) => s.load);
 
   useEffect(() => {
     let cancelled = false;
+    const update = (patch: Partial<DatabaseStatus>) => {
+      if (!cancelled) setStatus((current) => ({ ...current, ...patch }));
+    };
 
     (async () => {
       try {
+        await nextTick();
+
+        update({ stage: 'открываю базу' });
         const db = await getDatabase();
 
-        if (!cancelled) setStatus((s) => ({ ...s, stage: 'обновляю схему' }));
+        update({ stage: 'обновляю схему' });
         await migrate(db);
 
-        if (!cancelled) setStatus((s) => ({ ...s, stage: 'загружаю каталог упражнений' }));
-
-        // Сбой импорта каталога не должен мешать запуску: тренировки важнее справочника.
-        let ftsEnabled = false;
-        let exerciseCount = 0;
-        let catalogWarning: string | null = null;
-        try {
-          const seed = await seedCatalog(db);
-          ftsEnabled = seed.ftsEnabled;
-          exerciseCount = seed.count;
-        } catch (error) {
-          console.error('[gymlog] каталог не загрузился', error);
-          catalogWarning = errorMessage(error);
-        }
-
-        if (!cancelled) setStatus((s) => ({ ...s, stage: 'читаю настройки' }));
+        update({ stage: 'читаю настройки' });
         await loadSettings();
 
-        if (!cancelled) {
-          setStatus({
-            ready: true,
-            error: null,
-            catalogWarning,
-            ftsEnabled,
-            exerciseCount,
-            stage: 'готово',
+        const ftsEnabled = await isFtsAvailable(db);
+
+        // Приложение готово к работе. Каталог догружается отдельно — он нужен
+        // для поиска упражнений, но не для того, чтобы открыть приложение.
+        update({ ready: true, ftsEnabled, stage: 'готово', catalogLoading: true });
+
+        // Небольшая пауза: даём первому экрану отрисоваться и сделать свои запросы,
+        // чтобы импорт каталога не конкурировал с ними за соединение с базой.
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        try {
+          const seed = await seedCatalog(db, (done, total) => {
+            update({ catalogProgress: total > 0 ? done / total : 0 });
           });
+          update({
+            catalogLoading: false,
+            catalogProgress: 1,
+            exerciseCount: seed.count,
+            ftsEnabled: seed.ftsEnabled,
+          });
+        } catch (error) {
+          console.error('[gymlog] каталог не загрузился', error);
+          update({ catalogLoading: false, catalogWarning: errorMessage(error) });
         }
       } catch (error) {
         console.error('[gymlog] ошибка инициализации базы', error);
-        if (!cancelled) {
-          setStatus((s) => ({ ...s, ready: false, error: errorMessage(error) }));
-        }
+        update({ ready: false, error: errorMessage(error) });
       }
     })();
 

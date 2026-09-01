@@ -45,7 +45,7 @@ interface CatalogFile {
 
 const catalog = catalogData as unknown as CatalogFile;
 
-const CHUNK_SIZE = 60;
+const CHUNK_SIZE = 20;
 const META_KEY = 'catalog_version';
 
 export const CATALOG_VERSION = catalog.version;
@@ -79,7 +79,7 @@ async function insertMany(
   if (rows.length === 0) return;
   const placeholder = `(${columns.map(() => '?').join(',')})`;
   // SQLite ограничивает число параметров в одном запросе — режем на безопасные порции.
-  const perStatement = Math.max(1, Math.floor(900 / columns.length));
+  const perStatement = Math.max(1, Math.floor(400 / columns.length));
 
   for (let i = 0; i < rows.length; i += perStatement) {
     const slice = rows.slice(i, i + perStatement);
@@ -185,12 +185,17 @@ async function upsertChunk(
       instructions,
     );
     if (withFts) {
-      await insertMany(
-        tx,
-        'exercise_fts',
-        ['exercise_id', 'name_ru', 'name_en', 'aliases', 'muscles', 'equipment', 'tags'],
-        ftsRows,
-      );
+      try {
+        await insertMany(
+          tx,
+          'exercise_fts',
+          ['exercise_id', 'name_ru', 'name_en', 'aliases', 'muscles', 'equipment', 'tags'],
+          ftsRows,
+        );
+      } catch (error) {
+        // Поисковый индекс — не критичные данные: поиск переживёт это на LIKE-фолбэке.
+        console.warn('[gymlog] не удалось наполнить поисковый индекс', error);
+      }
     }
   });
 }
@@ -207,11 +212,19 @@ export interface SeedResult {
   ftsEnabled: boolean;
 }
 
+/** Пауза между порциями: отдаём управление интерфейсу, чтобы приложение не «залипало». */
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /**
  * Импорт каталога. Выполняется при первом запуске и при росте версии каталога.
  * Пользовательские упражнения (source = 'user') не затрагиваются никогда.
  */
-export async function seedCatalog(db: Database): Promise<SeedResult> {
+export async function seedCatalog(
+  db: Database,
+  onProgress?: (done: number, total: number) => void,
+): Promise<SeedResult> {
   const installed = await getInstalledVersion(db);
   const ftsEnabled = await isFtsAvailable(db);
 
@@ -226,8 +239,12 @@ export async function seedCatalog(db: Database): Promise<SeedResult> {
 
   const now = Date.now();
   const isFreshInstall = installed === 0;
-  for (let i = 0; i < catalog.exercises.length; i += CHUNK_SIZE) {
+  const total = catalog.exercises.length;
+
+  for (let i = 0; i < total; i += CHUNK_SIZE) {
     await upsertChunk(db, catalog.exercises.slice(i, i + CHUNK_SIZE), now, ftsEnabled, isFreshInstall);
+    onProgress?.(Math.min(i + CHUNK_SIZE, total), total);
+    await yieldToUi();
   }
 
   // Упражнения, исчезнувшие из поставки, скрываем, но не удаляем: на них ссылается история.

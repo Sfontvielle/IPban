@@ -28,8 +28,10 @@ function AppStack() {
           </>
         ) : (
           <>
+            <Txt variant="h2">GymLog</Txt>
             <ActivityIndicator color={palette.accent} />
-            <Txt variant="small" tone="muted">GymLog · {status.stage}</Txt>
+            {/* Шаг показан крупно: если запуск оборвётся, будет видно, на чём именно. */}
+            <Txt variant="title" tone="accent" align="center">{status.stage}</Txt>
           </>
         )}
       </View>

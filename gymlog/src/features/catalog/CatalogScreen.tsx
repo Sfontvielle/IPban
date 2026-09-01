@@ -9,6 +9,7 @@ import type { Equipment, MuscleGroup } from '@/constants/enums';
 import { ExerciseRow } from '@/features/catalog/components/ExerciseRow';
 import { FilterBar } from '@/features/catalog/components/FilterBar';
 import { SearchField } from '@/features/catalog/components/SearchField';
+import { useDatabaseStatus } from '@/db/provider';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ExerciseRepository } from '@/repositories/ExerciseRepository';
 import { usePalette } from '@/theme/ThemeProvider';
@@ -20,6 +21,7 @@ const PAGE_SIZE = 40;
 export function CatalogScreen() {
   const router = useRouter();
   const palette = usePalette();
+  const dbStatus = useDatabaseStatus();
 
   const [query, setQuery] = useState('');
   const [muscles, setMuscles] = useState<MuscleGroup[]>([]);
@@ -69,6 +71,12 @@ export function CatalogScreen() {
       <View style={styles.search}>
         <SearchField value={query} onChange={setQuery} />
       </View>
+
+      {dbStatus.catalogLoading ? (
+        <Txt variant="caption" tone="muted" style={styles.loadingBanner}>
+          Каталог загружается… {Math.round(dbStatus.catalogProgress * 100)}%
+        </Txt>
+      ) : null}
 
       <FilterBar
         muscles={muscles}
@@ -134,6 +142,7 @@ export function CatalogScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   search: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  loadingBanner: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   sectionTitle: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   footer: { height: 90 },
   fab: {
