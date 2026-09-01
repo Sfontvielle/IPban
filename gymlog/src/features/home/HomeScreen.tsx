@@ -20,6 +20,9 @@ import type { PersonalRecord, WorkoutSession, WorkoutTemplate } from '@/types/do
 import { formatDayLabel, formatDuration, periodOfCurrentWeek, plural } from '@/utils/date';
 import { formatInt } from '@/utils/format';
 import { formatWeight } from '@/utils/units';
+import { trace, traceError } from '@/utils/trace';
+
+trace('модуль HomeScreen загружен');
 
 export function HomeScreen() {
   const router = useRouter();
@@ -34,6 +37,7 @@ export function HomeScreen() {
   const [nextTemplate, setNextTemplate] = useState<WorkoutTemplate | null>(null);
 
   const reload = useCallback(async () => {
+    trace('Главная: загружаю данные');
     const period = periodOfCurrentWeek(Date.now(), settings.weekStartsOn);
     const [summary, sessions, active, prs, tips, recentTemplates] = await Promise.all([
       StatsRepository.periodSummary(period.fromMs, period.toMs),
@@ -49,13 +53,18 @@ export function HomeScreen() {
     setRecords(prs);
     setInsights(tips);
     setNextTemplate(recentTemplates[0] ?? null);
+    trace('Главная: данные загружены');
   }, [settings.weekStartsOn]);
 
   useFocusEffect(
     useCallback(() => {
-      reload();
+      // Ошибку здесь нельзя терять: без catch она станет необработанным
+      // промисом и просто исчезнет, не оставив следа в терминале.
+      reload().catch((error) => traceError('Главная: загрузка данных', error));
     }, [reload]),
   );
+
+  trace('Главная: рендер');
 
   const startWorkout = () => {
     if (activeSession) router.push('/workout/active');

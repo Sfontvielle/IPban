@@ -1,5 +1,9 @@
 import '@/utils/errorReporting';
 
+import { trace } from '@/utils/trace';
+
+trace('модуль _layout загружен');
+
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
@@ -13,9 +17,13 @@ import { DatabaseProvider, useDatabaseStatus } from '@/db/provider';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { spacing } from '@/theme/tokens';
 
+trace('импорты _layout выполнены');
+
 function AppStack() {
   const { palette, isDark } = useTheme();
   const status = useDatabaseStatus();
+
+  trace('AppStack рендер', { ready: status.ready, stage: status.stage });
 
   // В аварийном режиме 1 базы нет вообще — ждать её готовности бессмысленно.
   if (!status.ready && DIAGNOSTIC_MODE !== 1) {
@@ -31,7 +39,6 @@ function AppStack() {
           <>
             <Txt variant="h2">GymLog</Txt>
             <ActivityIndicator color={palette.accent} />
-            {/* Шаг показан крупно: если запуск оборвётся, будет видно, на чём именно. */}
             <Txt variant="title" tone="accent" align="center">{status.stage}</Txt>
           </>
         )}
@@ -39,41 +46,25 @@ function AppStack() {
     );
   }
 
+  trace('монтирую Stack навигатора');
+
+  /**
+   * Настройки экранов намеренно сведены к минимуму.
+   *
+   * expo-router и так находит все маршруты по файлам — блоки <Stack.Screen>
+   * нужны были только ради заголовков и модальных презентаций. Именно они
+   * обращаются к нативной части react-native-screens, а её падение
+   * закрывает приложение без единого сообщения. Вернём по одной,
+   * когда станет ясно, что запуск стабилен.
+   */
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: palette.ground },
-          headerTintColor: palette.accentInk,
-          headerTitleStyle: { color: palette.ink, fontWeight: '600' },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: palette.ground },
-        }}
-      >
+      <Stack screenOptions={{ contentStyle: { backgroundColor: palette.ground } }}>
+        {/* Единственное объявление: у вкладок свой заголовок, системный тут лишний.
+            У остальных экранов остаётся стандартный заголовок — с ним работает
+            кнопка «назад», и это самый обкатанный путь в react-native-screens. */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="workout/active"
-          options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
-        />
-        <Stack.Screen name="workout/start" options={{ title: 'Новая тренировка', presentation: 'modal' }} />
-        <Stack.Screen
-          name="workout/summary/[sessionId]"
-          options={{ title: 'Итоги', headerBackVisible: false, gestureEnabled: false }}
-        />
-        <Stack.Screen name="exercise/picker" options={{ title: 'Выбор упражнений', presentation: 'modal' }} />
-        <Stack.Screen name="exercise/new" options={{ title: 'Своё упражнение', presentation: 'modal' }} />
-        <Stack.Screen name="exercise/[id]/index" options={{ title: 'Упражнение' }} />
-        <Stack.Screen name="exercise/[id]/substitutes" options={{ title: 'Замена' }} />
-        <Stack.Screen name="template/new" options={{ title: 'Новая тренировка', presentation: 'modal' }} />
-        <Stack.Screen name="template/[id]/index" options={{ title: 'Тренировка' }} />
-        <Stack.Screen name="template/[id]/edit" options={{ title: 'Редактирование' }} />
-        <Stack.Screen name="history/[sessionId]" options={{ title: 'Тренировка' }} />
-        <Stack.Screen name="stats/[id]" options={{ title: 'Прогресс' }} />
-        <Stack.Screen name="chat/[chatId]" options={{ title: 'AI Тренер' }} />
-        <Stack.Screen name="settings/index" options={{ title: 'Настройки', presentation: 'modal' }} />
-        <Stack.Screen name="settings/ai-memory" options={{ title: 'Память AI' }} />
-        <Stack.Screen name="settings/data" options={{ title: 'Данные' }} />
       </Stack>
     </>
   );
@@ -93,6 +84,8 @@ function MinimalScreen() {
 }
 
 export default function RootLayout() {
+  trace('RootLayout рендер', { mode: DIAGNOSTIC_MODE });
+
   if (DIAGNOSTIC_MODE === 2) {
     return <MinimalScreen />;
   }

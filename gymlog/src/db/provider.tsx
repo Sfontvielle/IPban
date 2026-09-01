@@ -5,6 +5,7 @@ import { migrate } from '@/db/migrations';
 import { isFtsAvailable, seedCatalog } from '@/db/seed/CatalogSeeder';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { errorMessage } from '@/utils/result';
+import { trace, traceError } from '@/utils/trace';
 
 interface DatabaseStatus {
   ready: boolean;
@@ -51,24 +52,32 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         await nextTick();
 
         update({ stage: 'открываю базу' });
+        trace('БД: открываю');
         const db = await getDatabase();
+        trace('БД: открыта');
 
         update({ stage: 'обновляю схему' });
+        trace('БД: применяю миграции');
         await migrate(db);
+        trace('БД: миграции применены');
 
         update({ stage: 'читаю настройки' });
         await loadSettings();
+        trace('БД: настройки прочитаны');
 
         const ftsEnabled = await isFtsAvailable(db);
+        trace('БД: проверен FTS', { ftsEnabled });
 
         // Приложение готово к работе. Каталог догружается отдельно — он нужен
         // для поиска упражнений, но не для того, чтобы открыть приложение.
         update({ ready: true, ftsEnabled, stage: 'готово', catalogLoading: true });
+        trace('БД: готово, интерфейс разблокирован');
 
         // Небольшая пауза: даём первому экрану отрисоваться и сделать свои запросы,
         // чтобы импорт каталога не конкурировал с ними за соединение с базой.
         await new Promise((resolve) => setTimeout(resolve, 800));
 
+        trace('каталог: старт импорта в фоне');
         try {
           const seed = await seedCatalog(db, (done, total) => {
             update({ catalogProgress: total > 0 ? done / total : 0 });
@@ -79,12 +88,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
             exerciseCount: seed.count,
             ftsEnabled: seed.ftsEnabled,
           });
+          trace('каталог: импорт завершён', { count: seed.count });
         } catch (error) {
-          console.error('[gymlog] каталог не загрузился', error);
+          traceError('каталог не загрузился', error);
           update({ catalogLoading: false, catalogWarning: errorMessage(error) });
         }
       } catch (error) {
-        console.error('[gymlog] ошибка инициализации базы', error);
+        traceError('инициализация базы', error);
         update({ ready: false, error: errorMessage(error) });
       }
     })();
