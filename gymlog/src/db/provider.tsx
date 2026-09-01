@@ -9,6 +9,8 @@ import { errorMessage } from '@/utils/result';
 interface DatabaseStatus {
   ready: boolean;
   error: string | null;
+  /** Каталог не загрузился, но приложение работает — это не повод не пускать в тренировку. */
+  catalogWarning: string | null;
   ftsEnabled: boolean;
   exerciseCount: number;
   stage: string;
@@ -17,6 +19,7 @@ interface DatabaseStatus {
 const DatabaseContext = createContext<DatabaseStatus>({
   ready: false,
   error: null,
+  catalogWarning: null,
   ftsEnabled: false,
   exerciseCount: 0,
   stage: 'старт',
@@ -26,6 +29,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<DatabaseStatus>({
     ready: false,
     error: null,
+    catalogWarning: null,
     ftsEnabled: false,
     exerciseCount: 0,
     stage: 'открываю базу',
@@ -43,7 +47,19 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         await migrate(db);
 
         if (!cancelled) setStatus((s) => ({ ...s, stage: 'загружаю каталог упражнений' }));
-        const seed = await seedCatalog(db);
+
+        // Сбой импорта каталога не должен мешать запуску: тренировки важнее справочника.
+        let ftsEnabled = false;
+        let exerciseCount = 0;
+        let catalogWarning: string | null = null;
+        try {
+          const seed = await seedCatalog(db);
+          ftsEnabled = seed.ftsEnabled;
+          exerciseCount = seed.count;
+        } catch (error) {
+          console.error('[gymlog] каталог не загрузился', error);
+          catalogWarning = errorMessage(error);
+        }
 
         if (!cancelled) setStatus((s) => ({ ...s, stage: 'читаю настройки' }));
         await loadSettings();
@@ -52,8 +68,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           setStatus({
             ready: true,
             error: null,
-            ftsEnabled: seed.ftsEnabled,
-            exerciseCount: seed.count,
+            catalogWarning,
+            ftsEnabled,
+            exerciseCount,
             stage: 'готово',
           });
         }

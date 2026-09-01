@@ -1,17 +1,33 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 /**
  * Локальные уведомления таймера отдыха.
- * Работают в Expo Go на iOS; всё обёрнуто в try/catch — приложение не должно
- * падать из-за уведомлений, это вспомогательная функция.
+ *
+ * expo-notifications подключается ЛЕНИВО, через динамический import:
+ * expo-router загружает все файлы маршрутов при старте, поэтому обычный импорт
+ * затащил бы этот модуль в путь запуска приложения. В Expo Go он частично
+ * не поддерживается (см. предупреждения в консоли), и ему там делать нечего,
+ * пока пользователь не запустил таймер.
  */
+
+type NotificationsModule = typeof import('expo-notifications');
 
 let restNotificationId: string | null = null;
 let configured = false;
 let permissionGranted: boolean | null = null;
+let modulePromise: Promise<NotificationsModule | null> | null = null;
 
-async function ensureConfigured(): Promise<boolean> {
+async function loadModule(): Promise<NotificationsModule | null> {
+  if (!modulePromise) {
+    modulePromise = import('expo-notifications').catch((error) => {
+      console.warn('[gymlog] expo-notifications недоступен', error);
+      return null;
+    });
+  }
+  return modulePromise;
+}
+
+async function ensureConfigured(Notifications: NotificationsModule): Promise<boolean> {
   if (!configured) {
     try {
       Notifications.setNotificationHandler({
@@ -55,7 +71,11 @@ export async function scheduleRestNotification(seconds: number, title: string): 
   if (seconds <= 0) return;
   try {
     await cancelRestNotification();
-    if (!(await ensureConfigured())) return;
+
+    const Notifications = await loadModule();
+    if (!Notifications) return;
+    if (!(await ensureConfigured(Notifications))) return;
+
     restNotificationId = await Notifications.scheduleNotificationAsync({
       content: { title, body: 'Пора делать следующий подход', sound: true },
       trigger: {
@@ -71,10 +91,12 @@ export async function scheduleRestNotification(seconds: number, title: string): 
 
 export async function cancelRestNotification(): Promise<void> {
   try {
-    if (restNotificationId) {
+    if (!restNotificationId) return;
+    const Notifications = await loadModule();
+    if (Notifications) {
       await Notifications.cancelScheduledNotificationAsync(restNotificationId);
-      restNotificationId = null;
     }
+    restNotificationId = null;
   } catch {
     restNotificationId = null;
   }

@@ -186,6 +186,11 @@ export function SettingsScreen() {
           Упражнений в каталоге: {dbStatus.exerciseCount} · Поиск FTS5:{' '}
           {dbStatus.ftsEnabled ? 'включён' : 'резервный режим'}
         </Txt>
+        {dbStatus.catalogWarning ? (
+          <Txt variant="small" tone="warn">
+            Каталог не загрузился: {dbStatus.catalogWarning}
+          </Txt>
+        ) : null}
         <Txt variant="caption" tone="faint" style={styles.note}>
           Тексты техники подготовлены для GymLog. Изображения не используются — вместо них
           собственные векторные иконки, поэтому вопросов с лицензиями не возникает.

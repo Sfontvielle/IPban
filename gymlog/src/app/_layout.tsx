@@ -1,3 +1,5 @@
+import '@/utils/errorReporting';
+
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
@@ -5,6 +7,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Txt } from '@/components/ui/Txt';
 import { DatabaseProvider, useDatabaseStatus } from '@/db/provider';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -75,15 +78,17 @@ function AppStack() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <DatabaseProvider>
-          <ThemeProvider>
-            <AppStack />
-          </ThemeProvider>
-        </DatabaseProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <DatabaseProvider>
+            <ThemeProvider>
+              <AppStack />
+            </ThemeProvider>
+          </DatabaseProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 

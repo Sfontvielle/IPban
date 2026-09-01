@@ -1,10 +1,23 @@
-import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-
 import { getDatabase } from '@/db/client';
 import { LATEST_VERSION } from '@/db/migrations';
 import { toLocalDate } from '@/utils/date';
+
+/**
+ * Работа с файлами подключается лениво: expo-router загружает все экраны при старте,
+ * и обычный импорт затащил бы expo-file-system, expo-sharing и expo-document-picker
+ * в путь запуска приложения. Здесь они нужны только в момент экспорта или импорта.
+ */
+async function fileSystem() {
+  return import('expo-file-system');
+}
+
+async function sharing() {
+  return import('expo-sharing');
+}
+
+async function documentPicker() {
+  return import('expo-document-picker');
+}
 
 /** Таблицы с данными пользователя. Каталог не выгружается — он поставляется с приложением. */
 const USER_TABLES = [
@@ -80,11 +93,14 @@ export const BackupService = {
 
   async exportToFile(): Promise<string> {
     const json = await this.buildBackup();
+    const { File, Paths } = await fileSystem();
+
     const file = new File(Paths.cache, `gymlog-backup-${toLocalDate(Date.now())}.json`);
     if (file.exists) file.delete();
     file.create();
     file.write(json);
 
+    const Sharing = await sharing();
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' });
     }
@@ -111,11 +127,13 @@ export const BackupService = {
       ...rows.map((row) => headers.map((header) => toCsvValue(row[header])).join(',')),
     ].join('\n');
 
+    const { File, Paths } = await fileSystem();
     const file = new File(Paths.cache, `gymlog-sets-${toLocalDate(Date.now())}.csv`);
     if (file.exists) file.delete();
     file.create();
     file.write(csv);
 
+    const Sharing = await sharing();
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
     }
@@ -127,6 +145,7 @@ export const BackupService = {
    * каталог не трогается. Всё выполняется одной транзакцией.
    */
   async importFromFile(): Promise<{ ok: boolean; message: string }> {
+    const DocumentPicker = await documentPicker();
     const picked = await DocumentPicker.getDocumentAsync({
       type: ['application/json', 'public.json', '*/*'],
       copyToCacheDirectory: true,
@@ -137,6 +156,7 @@ export const BackupService = {
 
     let backup: BackupFile;
     try {
+      const { File } = await fileSystem();
       const file = new File(picked.assets[0].uri);
       backup = JSON.parse(await file.text()) as BackupFile;
     } catch {

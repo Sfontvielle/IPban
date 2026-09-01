@@ -1,5 +1,3 @@
-import * as SecureStore from 'expo-secure-store';
-
 import {
   AIError,
   type AIProvider,
@@ -23,6 +21,8 @@ export class ProxyProvider implements AIProvider {
 
   private async deviceToken(): Promise<string> {
     try {
+      // Ленивый импорт: модуль нужен только при обращении к AI, а не при старте приложения.
+      const SecureStore = await import('expo-secure-store');
       const existing = await SecureStore.getItemAsync(TOKEN_KEY);
       if (existing) return existing;
       const token = newId();
