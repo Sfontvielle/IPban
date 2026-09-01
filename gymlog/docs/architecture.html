@@ -218,7 +218,7 @@ pre.mermaid{
     <div class="stamp">
       Платформа&nbsp;&nbsp;<b>iOS (iPhone)</b><br>
       Разработка&nbsp;&nbsp;<b>Windows + PowerShell</b><br>
-      Стек&nbsp;&nbsp;<b>Expo SDK 57 / RN 0.86</b><br>
+      Стек&nbsp;&nbsp;<b>Expo SDK 54 / RN 0.81</b><br>
       Данные&nbsp;&nbsp;<b>SQLite, offline-first</b><br>
       Дата&nbsp;&nbsp;<b>август 2026</b>
     </div>
@@ -308,11 +308,11 @@ pre.mermaid{
   <div class="wide"><table>
     <thead><tr><th>Слой</th><th>Выбор</th><th>Версия</th><th>Статус</th></tr></thead>
     <tbody>
-      <tr><td>Платформа</td><td>Expo SDK</td><td class="num">57</td><td><span class="chip ok">Expo Go</span></td></tr>
-      <tr><td>Runtime</td><td>React Native / React</td><td class="num">0.86 / 19.2</td><td>New Architecture по умолчанию</td></tr>
+      <tr><td>Платформа</td><td>Expo SDK</td><td class="num">54</td><td><span class="chip ok">Expo Go</span></td></tr>
+      <tr><td>Runtime</td><td>React Native / React</td><td class="num">0.81 / 19.1</td><td>New Architecture по умолчанию</td></tr>
       <tr><td>Язык</td><td>TypeScript <code>strict</code></td><td class="num">5.9</td><td>—</td></tr>
       <tr><td>Навигация</td><td><code>expo-router</code></td><td class="num">6.0</td><td><span class="chip ok">Expo Go</span> файловый роутинг, typed routes</td></tr>
-      <tr><td>База данных</td><td><code>expo-sqlite</code></td><td class="num">57.0</td><td><span class="chip ok">Expo Go</span> FTS5 включён по умолчанию</td></tr>
+      <tr><td>База данных</td><td><code>expo-sqlite</code></td><td class="num">16.0</td><td><span class="chip ok">Expo Go</span> FTS5 включён по умолчанию</td></tr>
       <tr><td>Доступ к БД</td><td>чистый SQL + свои repositories</td><td>—</td><td>без ORM, см. раздел 3</td></tr>
       <tr><td>Состояние</td><td><code>zustand</code></td><td class="num">5.x</td><td>только активная тренировка, таймер, настройки</td></tr>
       <tr><td>Графики</td><td>собственный компонент на <code>react-native-svg</code></td><td class="num">15.12</td><td><span class="chip ok">Expo Go</span> без сторонних чартовых библиотек</td></tr>
@@ -1507,7 +1507,7 @@ flowchart LR
   <div class="wide"><table>
     <thead><tr><th>Инструмент</th><th>Версия</th><th>Зачем</th><th>Обязательно</th></tr></thead>
     <tbody>
-      <tr><td><b>Node.js LTS</b></td><td>≥ 22.13 (ставьте текущий LTS)</td><td>Expo SDK 57 требует минимум 22.13. Node — это движок, который запускает сервер разработки</td><td><span class="chip crit">да</span></td></tr>
+      <tr><td><b>Node.js LTS</b></td><td>≥ 20.19.4 (ставьте текущий LTS)</td><td>Expo SDK 54 требует минимум 20.19.4. Node — это движок, который запускает сервер разработки</td><td><span class="chip crit">да</span></td></tr>
       <tr><td><b>Git</b></td><td>любая свежая</td><td>История изменений. Настоятельно: коммит после каждого этапа</td><td><span class="chip crit">да</span></td></tr>
       <tr><td><b>VS Code</b></td><td>свежая</td><td>Редактор. Расширения: ESLint, Prettier, SQLite Viewer</td><td><span class="chip crit">да</span></td></tr>
       <tr><td><b>Expo Go</b> на iPhone</td><td>из App Store</td><td>Запуск приложения без Xcode</td><td><span class="chip crit">да</span></td></tr>
@@ -1545,7 +1545,7 @@ winget install --id Microsoft.VisualStudioCode -e</pre></div>
   <h3>Шаг 2. Обязательно закрыть и открыть PowerShell заново</h3>
   <p>Иначе новые программы не появятся в PATH и вы увидите «node не является внутренней или внешней командой».</p>
   <h3>Шаг 3. Проверка</h3>
-  <div class="wide"><div class="code-label">PowerShell — должны увидеть версии</div><pre>node -v      <i># ожидаем v22.13 или выше</i>
+  <div class="wide"><div class="code-label">PowerShell — должны увидеть версии</div><pre>node -v      <i># ожидаем v20.19.4 или выше</i>
 npm -v       <i># ожидаем 10.x или выше</i>
 git --version</pre></div>
   <div class="callout warn"><span class="k">Если node -v показывает версию ниже 22.13</span>
@@ -1722,13 +1722,13 @@ npx expo start</pre></div>
       <li>Подтвердить, что <b>кг</b> — ваша основная единица.</li>
       <li>Сказать, какую систему предпочитаете: <b>RIR</b> или <b>RPE</b> (можно обе, но по умолчанию одна).</li>
       <li>Завести <b>отдельный репозиторий</b> для GymLog.</li>
-      <li>Выполнить команды из раздела 25 и убедиться, что <code>node -v</code> ≥ 22.13.</li>
+      <li>Выполнить команды из раздела 25 и убедиться, что <code>node -v</code> ≥ 20.19.4.</li>
     </ol></div>
 </section>
 
 <div class="foot">
   <p><b>GymLog · Этап 1 — архитектура.</b> Документ описывает решения до написания кода.
-     Проект собран на Expo SDK 57 (React Native 0.86, React 19.2) — под версию Expo Go, которую отдаёт App Store.
+     Проект собран на Expo SDK 54 (React Native 0.81, React 19.1) — под версию Expo Go, доступную на устройстве (более свежий Expo Go требует iOS 16.4).
      Дальше — этап 2: создание проекта, навигация и дизайн-система. Не начинаю его без вашего согласования.</p>
 </div>
 
