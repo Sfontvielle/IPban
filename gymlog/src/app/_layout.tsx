@@ -4,10 +4,10 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { DIAGNOSTIC_MODE } from '@/config/startup';
 import { Txt } from '@/components/ui/Txt';
 import { DatabaseProvider, useDatabaseStatus } from '@/db/provider';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -17,7 +17,8 @@ function AppStack() {
   const { palette, isDark } = useTheme();
   const status = useDatabaseStatus();
 
-  if (!status.ready) {
+  // В аварийном режиме 1 базы нет вообще — ждать её готовности бессмысленно.
+  if (!status.ready && DIAGNOSTIC_MODE !== 1) {
     return (
       <View style={[styles.loading, { backgroundColor: palette.ground }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -78,24 +79,60 @@ function AppStack() {
   );
 }
 
+/** Уровень 2: голый экран без единого нашего провайдера. */
+function MinimalScreen() {
+  return (
+    <View style={styles.minimal}>
+      <Txt variant="h2" tone="inverse">GymLog</Txt>
+      <Txt tone="inverse" align="center">
+        Аварийный режим 2. Если этот экран виден — среда и React Native в порядке,
+        дело в наших провайдерах или базе.
+      </Txt>
+    </View>
+  );
+}
+
 export default function RootLayout() {
+  if (DIAGNOSTIC_MODE === 2) {
+    return <MinimalScreen />;
+  }
+
+  // Уровень 1: интерфейс без базы данных.
+  if (DIAGNOSTIC_MODE === 1) {
+    return (
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <AppStack />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
-      <GestureHandlerRootView style={styles.root}>
-        <SafeAreaProvider>
-          <DatabaseProvider>
-            <ThemeProvider>
-              <AppStack />
-            </ThemeProvider>
-          </DatabaseProvider>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+      <SafeAreaProvider>
+        <DatabaseProvider>
+          <ThemeProvider>
+            <AppStack />
+          </ThemeProvider>
+        </DatabaseProvider>
+      </SafeAreaProvider>
     </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  minimal: {
+    flex: 1,
+    backgroundColor: '#0E1216',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
   loading: {
     flex: 1,
     alignItems: 'center',
